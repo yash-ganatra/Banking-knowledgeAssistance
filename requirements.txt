@@ -1,0 +1,38 @@
+# Core Python Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+
+# NLP & Embeddings
+sentence-transformers>=2.2.2
+FlagEmbedding>=1.2.0
+
+# Vector Database
+chromadb>=0.4.0
+
+# LLM APIs
+groq>=0.4.0
+python-dotenv>=1.0.0
+
+# Search & Ranking
+rank-bm25>=0.2.2
+
+# Web Scraping & Parsing
+beautifulsoup4>=4.12.0
+
+# Progress Bars
+tqdm>=4.65.0
+
+# Machine Learning
+scikit-learn>=1.3.0
+torch>=2.0.0
+
+# Utilities
+pathlib>=1.0.1
+
+# Visualization (for testing/evaluation notebooks)
+matplotlib>=3.7.0
+seaborn>=0.12.0
+
+# Google Colab Integration (optional - for notebook environments)
+# google-colab
+# Uncomment above if running in Google Colab environment
