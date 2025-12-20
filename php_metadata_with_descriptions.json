@@ -15,7 +15,7 @@
         "name": "amendapiQueueLog",
         "num_lines": 117,
         "methods": [
-          {
+          { 
             "name": "__construct",
             "parameters": null,
             "return_type": "void",

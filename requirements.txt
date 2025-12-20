@@ -5,9 +5,11 @@ pandas>=2.0.0
 # NLP & Embeddings
 sentence-transformers>=2.2.2
 FlagEmbedding>=1.2.0
+transformers>=4.30.0
 
 # Vector Database
 chromadb>=0.4.0
+hnswlib>=0.7.0
 
 # LLM APIs
 groq>=0.4.0
