@@ -19,7 +19,6 @@ model = BGEM3FlagModel(
     "BAAI/bge-m3",
     use_fp16=False  # Mac-safe
 )
-
 print("✅ Setup complete. Model and ChromaDB loaded.")
 
 
