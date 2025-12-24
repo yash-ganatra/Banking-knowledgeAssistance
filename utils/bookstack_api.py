@@ -122,6 +122,21 @@ class BookStackAPI:
                 error_text = await response.text()
                 raise Exception(f"Async API request failed: {response.status} - {error_text}")
     
+    # ===== SHELF OPERATIONS =====
+    
+    def get_shelves(self, **params) -> Dict:
+        """Get all shelves with optional parameters"""
+        return self.make_request('/shelves', params=params)
+    
+    def get_shelf(self, shelf_id: int) -> Dict:
+        """Get shelf by ID with all books in it"""
+        return self.make_request(f'/shelves/{shelf_id}')
+    
+    def get_books_from_shelf(self, shelf_id: int) -> List[Dict]:
+        """Get all books from a specific shelf"""
+        shelf = self.get_shelf(shelf_id)
+        return shelf.get('books', [])
+    
     # ===== BOOK OPERATIONS =====
     
     def get_books(self, **params) -> Dict:

@@ -9,7 +9,7 @@ from markdownify import markdownify as md
 
 
 config = BookStackConfig(
-    base_url='http://143.244.141.254:8008/',
+    base_url='http://neuron.appinsource.com:6427/',
     token_id='4ZQrO9Uc1LnHOLfKc4RsNG0RwE1JCPdJ',
     token_secret='bgAM9sNZzt5iI8voZCNkxLQrQHipTMkc'
 )
@@ -62,10 +62,64 @@ def parse_book_data(data):
             response_text = md(page_json.get('html'))
             cleaned_text = re.sub(r'https?://(?:\d{1,3}\.){3}\d{1,3}\S*', '', response_text)    # remove pvt ips/urls
             print(cleaned_text)
-    
+
+
+def fetch_books_from_shelf(shelf_id):
+    """Fetch all books from a specific shelf"""
+    try:
+        print(f"Fetching books from shelf ID: {shelf_id}")
+        print("="*60)
+        
+        # Get shelf information
+        shelf_info = api.get_shelf(shelf_id)
+        shelf_name = shelf_info.get('name', 'Unknown Shelf')
+        print(f"Shelf Name: {shelf_name}")
+        print("-" * 60)
+        
+        # Get all books from the shelf
+        books = api.get_books_from_shelf(shelf_id)
+        
+        if not books:
+            print("No books found in this shelf.")
+            return []
+        
+        print(f"Found {len(books)} book(s) in shelf '{shelf_name}':\n")
+        
+        book_list = []
+        for book in books:
+            book_id = book.get('id')
+            book_name = book.get('name', 'Unknown Book')
+            book_slug = book.get('slug', '')
+            
+            print(f"  📚 Book ID: {book_id}")
+            print(f"     Name: {book_name}")
+            print(f"     Slug: {book_slug}")
+            print()
+            
+            book_list.append({
+                'id': book_id,
+                'name': book_name,
+                'slug': book_slug
+            })
+        
+        return book_list
+        
+    except Exception as e:
+        print(f"Error fetching books from shelf: {e}")
+        return []
     
 
 if __name__ == "__main__":
-    fetch_and_parse_book(bookid = 8)    
-    print("\n" + "="*60 + "\n")
+    # Fetch all books from shelf ID 8
+    books = fetch_books_from_shelf(shelf_id=8)
+    
+    # Optional: Process each book to get its chapters
+    if books:
+        print("\n" + "="*60)
+        print("Processing individual books...\n")
+        
+        for book in books:
+            print(f"Processing book: {book['name']} (ID: {book['id']})")
+            fetch_and_parse_book(bookid=book['id'])
+            print("\n" + "="*60 + "\n")
 
