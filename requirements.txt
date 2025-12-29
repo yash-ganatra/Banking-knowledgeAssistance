@@ -38,3 +38,9 @@ seaborn>=0.12.0
 # Google Colab Integration (optional - for notebook environments)
 # google-colab
 # Uncomment above if running in Google Colab environment
+
+# Backend API
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+
