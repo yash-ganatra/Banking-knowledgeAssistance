@@ -20,6 +20,7 @@ function App() {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [hasUserInteracted, setHasUserInteracted] = useState(false);
 
   // Context Options
   const contexts = [
@@ -37,6 +38,10 @@ function App() {
       role: 'user',
       content: inputValue
     };
+
+    if (!hasUserInteracted) {
+      setHasUserInteracted(true);
+    }
 
     setMessages(prev => [...prev, newMessage]);
     setInputValue('');
@@ -76,9 +81,13 @@ function App() {
     <div className="relative min-h-screen bg-white text-gray-800 font-sans overflow-hidden">
       {/* Background Cube and Effects */}
       <BackgroundEffects />
-      <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none">
-        <RotatingCube />
-      </div>
+      <AnimatePresence>
+        {!hasUserInteracted && (
+          <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none">
+            <RotatingCube layoutId="cube-main" size={288} />
+          </div>
+        )}
+      </AnimatePresence>
 
       <div className="relative z-10 flex h-screen">
         {/* Sidebar */}
@@ -92,8 +101,12 @@ function App() {
             >
               <div className="p-6 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white">
-                    <Shield size={18} />
+                  <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white overflow-visible">
+                    {hasUserInteracted ? (
+                      <RotatingCube layoutId="cube-main" size={32} />
+                    ) : (
+                      <Shield size={18} />
+                    )}
                   </div>
                   <span className="font-bold text-gray-800 tracking-tight">Cube AI</span>
                 </div>

@@ -33,34 +33,37 @@ class MermaidErrorBoundary extends Component {
     }
 }
 
-const MermaidDiagramInternal = ({ code }) => {
+export const MermaidDiagramInternal = ({ code }) => {
     const elementRef = useRef(null);
     const [svg, setSvg] = useState('');
     const [isRendering, setIsRendering] = useState(false);
+    const [renderError, setRenderError] = useState(false);
 
     useEffect(() => {
+        if (!code || !code.trim()) {
+            setSvg('');
+            return;
+        }
+
         // Debounce rendering to handle streaming inputs
         const timeoutId = setTimeout(async () => {
-            if (!elementRef.current || !code || isRendering) return;
-
-            // Basic validation to prevent attempting to render obviously incomplete code
-            if (!code.includes('graph') && !code.includes('sequence') && !code.includes('flowchart') && !code.includes('classDiagram')) {
-                // Allow it to try if we aren't sure, but usually valid charts start with a keyword. 
-                // However, streaming might send "gra" then "ph".
-                // We rely on catch block, but debounce helps wait for "graph".
-            }
+            // If component unmounted or code changed, simple check (though closure captures 'code')
+            if (!elementRef.current) return;
 
             setIsRendering(true);
+            setRenderError(false);
+
             try {
+                // Initialize if needed (though we do it globally)
+                // mermaid.initialize({ startOnLoad: false, ... });
+
                 const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-                // mermaid.render throws if parsing fails
-                const { svg } = await mermaid.render(id, code);
-                setSvg(svg);
+                // mermaid.render returns objects with svg property
+                const { svg: renderedSvg } = await mermaid.render(id, code);
+                setSvg(renderedSvg);
             } catch (error) {
-                // Suppress errors during streaming/typing
-                console.debug('Mermaid render warning (handling stream):', error);
-                // We do NOT update state to error message here to avoid flickering "Failed" while typing.
-                // We just keep the old SVG or empty.
+                console.debug('Mermaid render error:', error);
+                setRenderError(true);
             } finally {
                 setIsRendering(false);
             }
@@ -69,11 +72,28 @@ const MermaidDiagramInternal = ({ code }) => {
         return () => clearTimeout(timeoutId);
     }, [code]);
 
+    // If no code, or whitespace only, render nothing
+    if (!code || !code.trim()) return null;
+
+    // If error, fallback to code block
+    if (renderError) {
+        return (
+            <div className="my-4 p-4 rounded-lg bg-red-50 border border-red-100 text-xs font-mono text-red-600 overflow-x-auto whitespace-pre">
+                <div className="mb-2 font-semibold">Diagram Render Error</div>
+                {code}
+            </div>
+        );
+    }
+
+    // Only render the container if we have content or are waiting
+    if (!svg && !isRendering) return null;
+
     return (
         <div
             ref={elementRef}
-            className="mermaid my-4 flex justify-center bg-white p-4 rounded-lg border border-gray-100 shadow-sm overflow-x-auto min-h-[50px]"
+            className="my-4 flex justify-center bg-white p-4 rounded-lg border border-gray-100 shadow-sm overflow-x-auto min-h-[50px] transition-all"
             dangerouslySetInnerHTML={{ __html: svg }}
+            style={{ opacity: isRendering ? 0.5 : 1 }}
         />
     );
 };

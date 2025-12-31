@@ -238,7 +238,7 @@ async def inference_php(request: QueryRequest):
     
     llm_response = None
     if llm_service:
-        system_prompt = "You are an expert PHP Laravel developer. Answer the user query based strictly on the provided PHP code context. Do not hallucinate. If the provided context contains Mermaid JS diagram code, you MUST include it in your response wrapped in a mermaid code block."
+        system_prompt = "You are an expert PHP Laravel developer. Answer the user query based strictly on the provided PHP code context. Do not hallucinate."
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
         
     return QueryResponse(results=results, llm_response=llm_response, context_used=context)
@@ -253,7 +253,7 @@ async def inference_js(request: QueryRequest):
     
     llm_response = None
     if llm_service:
-        system_prompt = "You are an expert JavaScript/React developer. Answer the user query based strictly on the provided JS code context. Do not hallucinate. If the provided context contains Mermaid JS diagram code, you MUST include it in your response wrapped in a mermaid code block."
+        system_prompt = "You are an expert JavaScript/React developer. Answer the user query based strictly on the provided JS code context. Do not hallucinate."
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
         
     return QueryResponse(results=results, llm_response=llm_response, context_used=context)
