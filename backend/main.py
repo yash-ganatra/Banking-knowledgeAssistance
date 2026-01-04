@@ -185,8 +185,8 @@ def startup_event():
 
     # Initialize PHP Engine
     try:
-        # PHP DB is in vector_db
-        php_db_path = os.path.join(VECTOR_DB_ROOT, "php_chroma_db")
+        # PHP DB with code snippets
+        php_db_path = os.path.join(VECTOR_DB_ROOT, "php_vector_db")
         php_engine = CodeQueryEngine(php_db_path, "php_code_chunks", "php")
         logger.info("PHP Engine Ready")
     except Exception as e:

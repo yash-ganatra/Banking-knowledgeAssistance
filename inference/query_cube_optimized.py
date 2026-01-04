@@ -1,11 +1,11 @@
 """
-Advanced Query Interface for CUBE Documentation with Hybrid Retrieval
-Supports semantic search, metadata filtering, and re-ranking
+"""Advanced Query Interface for CUBE Documentation
+Supports semantic search and metadata filtering
 """
 
 import chromadb
 from chromadb.config import Settings
-from sentence_transformers import SentenceTransformer, CrossEncoder
+from sentence_transformers import SentenceTransformer
 from typing import List, Dict, Optional
 import json
 
@@ -15,23 +15,16 @@ class CUBEQueryEngine:
         self,
         db_path: str = "./vector_db/cube_optimized_db",
         collection_name: str = "cube_docs_optimized",
-        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2",
-        reranker_model: Optional[str] = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        embedding_model: str = "sentence-transformers/all-MiniLM-L6-v2"
     ):
         self.db_path = db_path
         self.collection_name = collection_name
         
         print("🔧 Initializing CUBE Query Engine...")
         
-        # Load models
+        # Load embedding model
         print(f"  Loading embedding model: {embedding_model}")
         self.embedding_model = SentenceTransformer(embedding_model)
-        
-        if reranker_model:
-            print(f"  Loading reranker model: {reranker_model}")
-            self.reranker = CrossEncoder(reranker_model)
-        else:
-            self.reranker = None
         
         # Connect to ChromaDB
         print(f"  Connecting to database: {db_path}")
@@ -49,7 +42,6 @@ class CUBEQueryEngine:
         query_text: str,
         top_k: int = 5,
         filters: Optional[Dict] = None,
-        rerank: bool = True,
         include_synthetic: bool = True
     ) -> List[Dict]:
         """
@@ -59,7 +51,6 @@ class CUBEQueryEngine:
             query_text: The search query
             top_k: Number of results to return
             filters: Metadata filters (e.g., {"book_name": "CUBE Project Overview"})
-            rerank: Whether to rerank results using cross-encoder
             include_synthetic: Whether to include synthetic chunks in results
         
         Returns:
@@ -77,12 +68,10 @@ class CUBEQueryEngine:
         if not include_synthetic:
             where["is_synthetic"] = {"$ne": "True"}
         
-        # Retrieve initial results (2x top_k for reranking)
-        initial_k = top_k * 2 if rerank and self.reranker else top_k
-        
+        # Retrieve results
         results = self.collection.query(
             query_embeddings=[query_embedding],
-            n_results=initial_k,
+            n_results=top_k,
             where=where if where else None
         )
         
@@ -95,18 +84,6 @@ class CUBEQueryEngine:
                 'metadata': results['metadatas'][0][i],
                 'distance': results['distances'][0][i] if 'distances' in results else None
             })
-        
-        # Rerank if enabled
-        if rerank and self.reranker and len(formatted_results) > 0:
-            pairs = [[query_text, result['content']] for result in formatted_results]
-            scores = self.reranker.predict(pairs)
-            
-            # Add rerank scores and sort
-            for result, score in zip(formatted_results, scores):
-                result['rerank_score'] = float(score)
-            
-            formatted_results.sort(key=lambda x: x['rerank_score'], reverse=True)
-            formatted_results = formatted_results[:top_k]
         
         return formatted_results
     
@@ -132,8 +109,7 @@ class CUBEQueryEngine:
         # Note: ChromaDB filtering on comma-separated values needs special handling
         results = self.query(
             query_text=f"{account_type} {query_text}",
-            top_k=top_k * 2,  # Get more results
-            rerank=True
+            top_k=top_k * 2  # Get more results
         )
         
         # Filter results that contain the account type
@@ -154,8 +130,7 @@ class CUBEQueryEngine:
         """Query within specific module (Branch, NPC, Admin, QC, etc.)"""
         results = self.query(
             query_text=f"{module} {query_text}",
-            top_k=top_k * 2,
-            rerank=True
+            top_k=top_k * 2
         )
         
         # Filter results that contain the module
@@ -217,9 +192,7 @@ class CUBEQueryEngine:
                 print(f"    Concepts: {', '.join(concepts)}")
             
             # Scores
-            if 'rerank_score' in result:
-                print(f"    Relevance: {result['rerank_score']:.4f}")
-            elif result.get('distance') is not None:
+            if result.get('distance') is not None:
                 print(f"    Distance: {result['distance']:.4f}")
             
             # Content preview
@@ -286,7 +259,7 @@ class CUBEQueryEngine:
                 
                 else:
                     # Regular semantic search
-                    results = self.query(query, top_k=5, rerank=True)
+                    results = self.query(query, top_k=5)
                 
                 self.print_results(results, show_content=True)
             
@@ -330,8 +303,7 @@ def main():
         
         results = engine.query(
             example['query'],
-            top_k=3,
-            rerank=True
+            top_k=3
         )
         
         engine.print_results(results, show_content=True)

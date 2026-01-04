@@ -63,6 +63,7 @@ class PHPChunksEmbedder:
         """
         Prepare the text representation of a chunk for embedding.
         Combines relevant metadata fields into a comprehensive text.
+        Includes code snippet if available for better semantic matching.
         
         Args:
             chunk: Dictionary containing chunk metadata
@@ -87,6 +88,11 @@ class PHPChunksEmbedder:
             dependencies = chunk.get('dependencies', [])
             if dependencies:
                 text_parts.append(f"Dependencies: {', '.join(dependencies)}")
+            
+            # Add code snippet if available
+            code_snippet = chunk.get('code_snippet')
+            if code_snippet:
+                text_parts.append(f"\nCode:\n{code_snippet}")
                 
         elif chunk_type == "php_method":
             text_parts.append(f"Method: {chunk.get('class_name', '')}.{chunk.get('method_name', '')}")
@@ -94,6 +100,11 @@ class PHPChunksEmbedder:
             text_parts.append(f"Parameters: {chunk.get('parameters', '')}")
             text_parts.append(f"Returns: {chunk.get('return_type', '')}")
             text_parts.append(f"File: {chunk.get('file_path', '')}")
+            
+            # Add code snippet if available
+            code_snippet = chunk.get('code_snippet')
+            if code_snippet:
+                text_parts.append(f"\nCode:\n{code_snippet}")
         
         return "\n".join(text_parts)
     
@@ -130,6 +141,15 @@ class PHPChunksEmbedder:
             metadata["method_name"] = chunk.get("method_name", "")
             metadata["return_type"] = chunk.get("return_type", "")
             metadata["parameters"] = str(chunk.get("parameters", ""))
+        
+        # Add code metadata if available
+        if chunk.get("code_snippet"):
+            metadata["has_code"] = True
+            metadata["code_num_lines"] = int(chunk.get("code_num_lines", 0))
+            metadata["code_line_start"] = int(chunk.get("code_line_start", 0))
+            metadata["code_line_end"] = int(chunk.get("code_line_end", 0))
+        else:
+            metadata["has_code"] = False
         
         return metadata
     
