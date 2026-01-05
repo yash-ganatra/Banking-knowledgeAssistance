@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText } from 'lucide-react';
+import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RotatingCube } from './components/RotatingCube';
 import { BackgroundEffects } from './components/BackgroundEffects';
@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [selectedContext, setSelectedContext] = useState('business'); // business, php, js
+  const [selectedContext, setSelectedContext] = useState('business'); // business, php, js, blade
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -27,6 +27,7 @@ function App() {
     { id: 'business', label: 'Business Docs', icon: <FileText size={18} /> },
     { id: 'php', label: 'PHP Knowledge', icon: <Database size={18} /> },
     { id: 'js', label: 'JS Knowledge', icon: <Code size={18} /> },
+    { id: 'blade', label: 'Blade Templates', icon: <FileCode size={18} /> },
   ];
 
   const handleSendMessage = async (e) => {

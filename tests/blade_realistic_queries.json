@@ -1,0 +1,380 @@
+{
+  "description": "Realistic blade template queries based on actual banking application templates",
+  "categories": {
+    "account_opening_forms": [
+      {
+        "query": "What are all the fields in the account opening form?",
+        "expected_files": ["form.blade.php", "addaccount.blade.php"],
+        "category": "forms"
+      },
+      {
+        "query": "How is CSRF protection implemented in the account opening form?",
+        "expected_files": ["form.blade.php", "login.blade.php"],
+        "category": "security"
+      },
+      {
+        "query": "What scheme codes are available for account opening and how are they displayed?",
+        "expected_files": ["addaccount.blade.php", "form.blade.php"],
+        "category": "business_logic"
+      },
+      {
+        "query": "Show me the special declaration section for account opening including lead generation and customer meeting location",
+        "expected_files": ["form.blade.php"],
+        "category": "forms"
+      }
+    ],
+    "authentication_security": [
+      {
+        "query": "How does the login page handle authentication with CSRF tokens?",
+        "expected_files": ["login.blade.php", "celebration_login.blade.php"],
+        "category": "security"
+      },
+      {
+        "query": "What validation errors are displayed on the login form?",
+        "expected_files": ["login.blade.php"],
+        "category": "forms"
+      },
+      {
+        "query": "How is the user authentication modal implemented in the submission view?",
+        "expected_files": ["submission.blade.php"],
+        "category": "security"
+      },
+      {
+        "query": "What happens when unauthorized tampering is detected?",
+        "expected_files": ["trespassed.blade.php"],
+        "category": "security"
+      }
+    ],
+    "kyc_documents": [
+      {
+        "query": "What OVD document types can be uploaded for KYC verification?",
+        "expected_files": ["addovddocuments.blade.php", "addovddocumentsapplicant.blade.php"],
+        "category": "kyc"
+      },
+      {
+        "query": "How are Aadhaar, Passport, Voter ID and Driving Licence details captured in the OVD form?",
+        "expected_files": ["addovddocumentsapplicant.blade.php"],
+        "category": "kyc"
+      },
+      {
+        "query": "Show me the address proof section in OVD submission for HUF accounts",
+        "expected_files": ["huf_ovd_submission.blade.php", "addovddocuments.blade.php"],
+        "category": "kyc"
+      }
+    ],
+    "risk_classification": [
+      {
+        "query": "What fields are required for risk classification of a customer?",
+        "expected_files": ["addriskclassification.blade.php", "addriskclassificationapplicant.blade.php"],
+        "category": "risk"
+      },
+      {
+        "query": "How is PEP status and US person flag captured in risk classification?",
+        "expected_files": ["addriskclassificationapplicant.blade.php"],
+        "category": "risk"
+      },
+      {
+        "query": "Show me the annual turnover and source of funds fields in risk assessment",
+        "expected_files": ["addriskclassification.blade.php"],
+        "category": "risk"
+      }
+    ],
+    "nomination_funding": [
+      {
+        "query": "What nominee details can be added for account opening?",
+        "expected_files": ["addnomineeapplicant.blade.php", "addnomineedetails.blade.php"],
+        "category": "nomination"
+      },
+      {
+        "query": "How many nominees can be added for different account types?",
+        "expected_files": ["addnomineedetails.blade.php"],
+        "category": "nomination"
+      },
+      {
+        "query": "What initial funding options are available - Cheque, NEFT/RTGS or DCB Account?",
+        "expected_files": ["intialfunding.blade.php", "callcenterintialfunding.blade.php"],
+        "category": "funding"
+      },
+      {
+        "query": "Show me the financial information form including tenure and auto-renewal settings",
+        "expected_files": ["addfinancialinfo.blade.php"],
+        "category": "funding"
+      }
+    ],
+    "declarations_compliance": [
+      {
+        "query": "What declarations are required before account submission?",
+        "expected_files": ["declaration.blade.php", "schemedeclaration.blade.php"],
+        "category": "compliance"
+      },
+      {
+        "query": "How are third-party declarations and PEP declarations captured with file uploads?",
+        "expected_files": ["declaration.blade.php", "schemedeclaration.blade.php"],
+        "category": "compliance"
+      },
+      {
+        "query": "Show me the vernacular language and name mismatch declaration checkboxes",
+        "expected_files": ["declaration.blade.php"],
+        "category": "compliance"
+      }
+    ],
+    "delight_kit_management": [
+      {
+        "query": "How can users search and filter delight kits by scheme code and branch ID?",
+        "expected_files": ["kitdetails.blade.php", "seekapproval.blade.php"],
+        "category": "kits"
+      },
+      {
+        "query": "What is the kit dispatch workflow with customer ID and account number filters?",
+        "expected_files": ["kitdispatch.blade.php"],
+        "category": "kits"
+      },
+      {
+        "query": "Show me the kit count approval table with DR status filters",
+        "expected_files": ["kitcountapproval.blade.php"],
+        "category": "kits"
+      },
+      {
+        "query": "How is the delight kit sequence number selected and saved?",
+        "expected_files": ["delight.blade.php"],
+        "category": "kits"
+      },
+      {
+        "query": "What columns are displayed in the inventory table for scheme stock tracking?",
+        "expected_files": ["inventorytable.blade.php"],
+        "category": "kits"
+      }
+    ],
+    "breadcrumb_navigation": [
+      {
+        "query": "What are the steps in the multi-step account opening breadcrumb navigation?",
+        "expected_files": ["breadcrumb.blade.php"],
+        "category": "navigation"
+      },
+      {
+        "query": "How does the breadcrumb handle navigation between Basic Details, OVD Documents, CIDD, Nomination and Review steps?",
+        "expected_files": ["breadcrumb.blade.php"],
+        "category": "navigation"
+      }
+    ],
+    "chat_communication": [
+      {
+        "query": "How does the user chat interface display messages between sender and recipient?",
+        "expected_files": ["userchat.blade.php"],
+        "category": "chat"
+      },
+      {
+        "query": "Show me the searchable users list sidebar for chat",
+        "expected_files": ["userslist.blade.php"],
+        "category": "chat"
+      },
+      {
+        "query": "How are user initials displayed as avatars in the chat interface?",
+        "expected_files": ["userchat.blade.php"],
+        "category": "chat"
+      }
+    ],
+    "review_submission": [
+      {
+        "query": "What information is shown in the review page before final submission?",
+        "expected_files": ["review.blade.php", "submission.blade.php"],
+        "category": "review"
+      },
+      {
+        "query": "How is the submission form rendered with CIF declaration and account details?",
+        "expected_files": ["submissionform.blade.php"],
+        "category": "review"
+      },
+      {
+        "query": "Show me the mask/unmask functionality for sensitive fields in review mode",
+        "expected_files": ["mask_unmask_btn.blade.php"],
+        "category": "review"
+      }
+    ],
+    "tracking_monitoring": [
+      {
+        "query": "How can users track AOF numbers and view application status?",
+        "expected_files": ["aoftracking.blade.php"],
+        "category": "tracking"
+      },
+      {
+        "query": "Show me the timeline view with activity tracking and TAT warnings",
+        "expected_files": ["trackingdetails.blade.php"],
+        "category": "tracking"
+      },
+      {
+        "query": "What filters are available for dispatch applications tracking?",
+        "expected_files": ["dispatch.blade.php"],
+        "category": "tracking"
+      }
+    ],
+    "admin_management": [
+      {
+        "query": "How does the master table management interface allow adding columns and exporting data?",
+        "expected_files": ["mastertable.blade.php", "oaotable.blade.php"],
+        "category": "admin"
+      },
+      {
+        "query": "Show me the branch table data form with cluster, zone and region fields",
+        "expected_files": ["addbranchtabledata.blade.php", "addoaotable.blade.php"],
+        "category": "admin"
+      },
+      {
+        "query": "How are email and SMS templates created with message type and role selection?",
+        "expected_files": ["addtemplate.blade.php", "edittemplate.blade.php"],
+        "category": "admin"
+      },
+      {
+        "query": "What fields are captured when adding a new user with employee ID?",
+        "expected_files": ["adduser.blade.php"],
+        "category": "admin"
+      }
+    ],
+    "logging_monitoring": [
+      {
+        "query": "How can admins view user activity logs filtered by user name, date and module?",
+        "expected_files": ["useractivitylog.blade.php"],
+        "category": "logging"
+      },
+      {
+        "query": "Show me the exception log viewer with user name and timer filters",
+        "expected_files": ["exception.blade.php"],
+        "category": "logging"
+      },
+      {
+        "query": "What information is displayed in the API queue log table?",
+        "expected_files": ["apiqueuelog.blade.php"],
+        "category": "logging"
+      },
+      {
+        "query": "How are pending email/SMS notifications tracked by date?",
+        "expected_files": ["notificationpending.blade.php"],
+        "category": "logging"
+      },
+      {
+        "query": "Show me the DSA API log viewer with table selection dropdown",
+        "expected_files": ["ApiLogTable.blade.php"],
+        "category": "logging"
+      }
+    ],
+    "dashboard_reports": [
+      {
+        "query": "What statistics are shown on the user dashboard for savings accounts?",
+        "expected_files": ["dashboard.blade.php"],
+        "category": "dashboard"
+      },
+      {
+        "query": "How does the branch inventory view display stock details by branch?",
+        "expected_files": ["branchinventory.blade.php"],
+        "category": "reports"
+      },
+      {
+        "query": "Show me the customer enquiry modal with account details grid",
+        "expected_files": ["ccgrid.blade.php"],
+        "category": "reports"
+      }
+    ],
+    "entity_corporate": [
+      {
+        "query": "What entity office address fields are required for corporate KYC?",
+        "expected_files": ["officeaddress.blade.php"],
+        "category": "entity"
+      },
+      {
+        "query": "How is the entity name displayed in the entity details view?",
+        "expected_files": ["entityform.blade.php"],
+        "category": "entity"
+      }
+    ],
+    "utilities": [
+      {
+        "query": "How does the airway bill batch management page handle printing and actions?",
+        "expected_files": ["addairwaybillno.blade.php"],
+        "category": "utilities"
+      },
+      {
+        "query": "Show me the debug info upload interface with text file import",
+        "expected_files": ["uploaddebuginfo.blade.php"],
+        "category": "utilities"
+      },
+      {
+        "query": "What is shown in the application version table?",
+        "expected_files": ["version.blade.php"],
+        "category": "utilities"
+      },
+      {
+        "query": "How does the one-time task panel for resetting AOF counter work?",
+        "expected_files": ["onetimetask.blade.php"],
+        "category": "utilities"
+      }
+    ],
+    "help_documentation": [
+      {
+        "query": "How are help videos and images displayed in the user help page?",
+        "expected_files": ["userhelp.blade.php"],
+        "category": "help"
+      },
+      {
+        "query": "Show me the modal implementation for displaying workflow diagrams",
+        "expected_files": ["userhelp.blade.php"],
+        "category": "help"
+      }
+    ]
+  },
+  "complex_multi_template_queries": [
+    {
+      "query": "Walk me through the complete account opening workflow from basic details to final submission",
+      "expected_files": ["breadcrumb.blade.php", "addaccount.blade.php", "addovddocuments.blade.php", "declaration.blade.php", "submission.blade.php"],
+      "category": "workflow"
+    },
+    {
+      "query": "How do different blade templates handle the review mode with disabled inputs and masked fields?",
+      "expected_files": ["mask_unmask_btn.blade.php", "review.blade.php", "addovddocuments.blade.php"],
+      "category": "review_pattern"
+    },
+    {
+      "query": "What blade directives are used across templates for authentication checks - @auth, @if, @csrf?",
+      "expected_files": ["welcome.blade.php", "login.blade.php", "form.blade.php"],
+      "category": "blade_directives"
+    },
+    {
+      "query": "Compare how forms handle file uploads for KYC documents, declarations and debug files",
+      "expected_files": ["addovddocuments.blade.php", "declaration.blade.php", "uploaddebuginfo.blade.php"],
+      "category": "file_uploads"
+    },
+    {
+      "query": "How are DataTables initialized across different views for kits, logs and tracking?",
+      "expected_files": ["kitdetails.blade.php", "useractivitylog.blade.php", "aoftracking.blade.php"],
+      "category": "datatables"
+    }
+  ],
+  "edge_cases": [
+    {
+      "query": "How are HUF accounts handled differently in OVD submission and nominee sections?",
+      "expected_files": ["huf_ovd_submission.blade.php", "addnomineedetails.blade.php"],
+      "category": "huf_special_case"
+    },
+    {
+      "query": "What conditional logic determines ETB vs NTB customer field visibility?",
+      "expected_files": ["addaccountapplicant.blade.php", "addaccount.blade.php"],
+      "category": "etb_ntb"
+    },
+    {
+      "query": "How does the system handle minor accounts differently in funding and account setup?",
+      "expected_files": ["intialfunding.blade.php", "declaration.blade.php"],
+      "category": "minor_accounts"
+    }
+  ],
+  "performance_test_batch": [
+    "Show all fields in account opening form with scheme code dropdown",
+    "How to add OVD documents with Aadhaar and Passport details?",
+    "What initial funding methods are supported for new accounts?",
+    "How to search delight kits by customer ID and kit number?",
+    "Show the breadcrumb steps for account onboarding flow",
+    "How is CSRF token used in login and form submissions?",
+    "What nominee information is captured including guardian details?",
+    "How to track AOF status and view timeline activities?",
+    "Show risk classification fields for annual turnover and PEP status",
+    "How are declarations handled with file upload proof?"
+  ]
+}

@@ -25,6 +25,9 @@ load_dotenv()
 # Add parent directory to path to allow imports if needed
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Import BladeDescriptionEngine
+from utils.blade_description_engine import BladeDescriptionEngine
+
 app = FastAPI(title="Banking Knowledge Assistant API")
 
 # CORS
@@ -170,11 +173,12 @@ class LLMService:
 business_engine = None
 php_engine = None
 js_engine = None
+blade_engine = None
 llm_service = None
 
 @app.on_event("startup")
 def startup_event():
-    global business_engine, php_engine, js_engine, llm_service
+    global business_engine, php_engine, js_engine, blade_engine, llm_service
     
     # Initialize Business Engine
     try:
@@ -201,6 +205,13 @@ def startup_event():
     except Exception as e:
         logger.error(f"Failed to load JS Engine: {e}")
 
+    # Initialize Blade Engine
+    try:
+        blade_db_path = os.path.join(VECTOR_DB_ROOT, "blade_views_chroma_db")
+        blade_engine = BladeDescriptionEngine(db_path=blade_db_path)
+        logger.info("Blade Engine Ready")
+    except Exception as e:
+        logger.error(f"Failed to load Blade Engine: {e}")
         
     # Initialize LLM
     if GROQ_API_KEY:
@@ -257,6 +268,58 @@ async def inference_js(request: QueryRequest):
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
         
     return QueryResponse(results=results, llm_response=llm_response, context_used=context)
+
+@app.post("/inference/blade", response_model=QueryResponse)
+async def inference_blade(request: QueryRequest):
+    if not blade_engine:
+        raise HTTPException(status_code=503, detail="Blade engine not initialized")
+    
+    # Use blade engine's query method with Strategy 2
+    blade_results = blade_engine.query(
+        query_text=request.query,
+        top_k=request.top_k,
+        initial_candidates=20,
+        max_snippet_chars=2000,
+        use_rerank=request.rerank
+    )
+    
+    # Format context for LLM using blade engine's method
+    context = blade_engine.format_context_for_llm(
+        blade_results,
+        include_code=True,
+        include_descriptions=True
+    )
+    
+    llm_response = None
+    if llm_service:
+        system_prompt = """You are an expert Laravel Blade developer and template analyst.
+Answer the user query based strictly on the provided blade template context.
+Guidelines:
+1. Reference specific files and code sections when relevant
+2. Explain blade directives (@csrf, @auth, @include, etc.) clearly
+3. Highlight form handling and security features
+4. Be concise but thorough
+5. If context is insufficient, say so"""
+        llm_response = llm_service.generate_response(system_prompt, request.query, context)
+    
+    # Convert blade results to standard format
+    formatted_results = [{
+        'id': r['id'],
+        'content': r['snippet'],  # Use snippet instead of full content
+        'metadata': {
+            'file_name': r['file_name'],
+            'file_path': r['file_path'],
+            'section': r['section'],
+            'description': r['description'],
+            'has_form': r['has_form'],
+            'snippet_length': r['snippet_length'],
+            'content_length': r['content_length'],
+            'rerank_score': r.get('rerank_score')
+        },
+        'distance': r.get('distance')
+    } for r in blade_results]
+        
+    return QueryResponse(results=formatted_results, llm_response=llm_response, context_used=context)
 
 if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
