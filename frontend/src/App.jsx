@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RotatingCube } from './components/RotatingCube';
@@ -21,6 +21,15 @@ function App() {
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
+  const messagesEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages, isLoading]);
 
   // Context Options
   const contexts = [
@@ -85,7 +94,7 @@ function App() {
       <AnimatePresence>
         {!hasUserInteracted && (
           <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none">
-            <RotatingCube layoutId="cube-main" size={288} />
+            <RotatingCube layoutId="cube-main" size={224} />
           </div>
         )}
       </AnimatePresence>
@@ -291,6 +300,7 @@ function App() {
             )}
 
             <div className="h-4" />
+            <div ref={messagesEndRef} />
           </div>
 
           <div className="p-4 lg:p-8 bg-gradient-to-t from-white via-white/80 to-transparent">
