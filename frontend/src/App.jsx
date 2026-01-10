@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode } from 'lucide-react';
+import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode, Plus, Trash2, MessageSquare } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RotatingCube } from './components/RotatingCube';
 import { BackgroundEffects } from './components/BackgroundEffects';
@@ -22,6 +22,11 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const messagesEndRef = useRef(null);
+  
+  // Chat history state
+  const [conversations, setConversations] = useState([]);
+  const [currentConversationId, setCurrentConversationId] = useState(null);
+  const [loadingConversations, setLoadingConversations] = useState(true);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -30,6 +35,107 @@ function App() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
+
+  // Load conversations on mount
+  useEffect(() => {
+    loadConversations();
+  }, []);
+
+  // Load conversations from API
+  const loadConversations = async () => {
+    try {
+      setLoadingConversations(true);
+      const response = await fetch('http://localhost:8000/api/chat/conversations');
+      if (response.ok) {
+        const data = await response.json();
+        setConversations(data);
+      }
+    } catch (error) {
+      console.error('Error loading conversations:', error);
+    } finally {
+      setLoadingConversations(false);
+    }
+  };
+
+  // Create a new conversation
+  const createNewConversation = async () => {
+    // Don't create empty conversations - just reset the UI
+    // A conversation will be created automatically when the user sends the first message
+    setCurrentConversationId(null);
+    setMessages([{
+      id: Date.now(),
+      role: 'bot',
+      content: `Hello! I am your advanced banking assistant. This is a new ${selectedContext} conversation. How can I help you?`
+    }]);
+    setHasUserInteracted(false);
+  };
+
+  // Load a specific conversation
+  const loadConversation = async (conversationId) => {
+    try {
+      const response = await fetch(`http://localhost:8000/api/chat/conversations/${conversationId}`);
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentConversationId(conversationId);
+        setSelectedContext(data.context_type);
+        
+        // Convert messages to frontend format
+        const loadedMessages = data.messages.map(msg => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          context_used: msg.context_used
+        }));
+
+        if (loadedMessages.length === 0) {
+          // If no messages, add welcome message
+          setMessages([{
+            id: Date.now(),
+            role: 'bot',
+            content: `Hello! I am your advanced banking assistant. This is a ${data.context_type} conversation. How can I help you?`
+          }]);
+        } else {
+          setMessages(loadedMessages);
+        }
+        
+        setHasUserInteracted(loadedMessages.length > 0);
+      }
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+    }
+  };
+
+  // Delete a conversation
+  const deleteConversation = async (conversationId, event) => {
+    event.stopPropagation(); // Prevent triggering loadConversation
+    
+    if (!confirm('Are you sure you want to delete this conversation?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`http://localhost:8000/api/chat/conversations/${conversationId}`, {
+        method: 'DELETE'
+      });
+
+      if (response.ok) {
+        setConversations(prev => prev.filter(c => c.id !== conversationId));
+        
+        // If we deleted the current conversation, reset
+        if (conversationId === currentConversationId) {
+          setCurrentConversationId(null);
+          setMessages([{
+            id: 1,
+            role: 'bot',
+            content: 'Hello! I am your advanced banking assistant. Please select a knowledge base context and ask your question.'
+          }]);
+          setHasUserInteracted(false);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+    }
+  };
 
   // Context Options
   const contexts = [
@@ -58,10 +164,51 @@ function App() {
     setIsLoading(true);
 
     try {
+      // Create conversation if it doesn't exist
+      let convId = currentConversationId;
+      if (!convId) {
+        const convResponse = await fetch('http://localhost:8000/api/chat/conversations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: inputValue.length > 60 ? inputValue.substring(0, 60) + '...' : inputValue,  // Use first message as title
+            context_type: selectedContext
+          })
+        });
+
+        if (convResponse.ok) {
+          const newConv = await convResponse.json();
+          convId = newConv.id;
+          setCurrentConversationId(convId);
+          setConversations(prev => [newConv, ...prev]);
+        }
+      } else {
+        // If conversation exists but title is still "New Conversation", update it
+        const currentConv = conversations.find(c => c.id === convId);
+        if (currentConv && currentConv.title === 'New Conversation') {
+          try {
+            await fetch(`http://localhost:8000/api/chat/conversations/${convId}`, {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: inputValue.length > 60 ? inputValue.substring(0, 60) + '...' : inputValue
+              })
+            });
+          } catch (error) {
+            console.error('Error updating conversation title:', error);
+          }
+        }
+      }
+
       const response = await fetch(`http://localhost:8000/inference/${selectedContext}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: newMessage.content, top_k: 5, rerank: true })
+        body: JSON.stringify({ 
+          query: newMessage.content, 
+          top_k: 5, 
+          rerank: true,
+          conversation_id: convId  // Include conversation ID
+        })
       });
 
       if (!response.ok) throw new Error('Network response was not ok');
@@ -75,6 +222,10 @@ function App() {
       };
 
       setMessages(prev => [...prev, botResponse]);
+      
+      // Refresh conversations list to update message count
+      loadConversations();
+      
     } catch (error) {
       console.error("Error:", error);
       setMessages(prev => [...prev, {
@@ -167,10 +318,56 @@ function App() {
                 </div>
 
                 <div className="space-y-1 pt-4 border-t border-gray-100">
-                  <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Recent Chats</h3>
-                  <div className="px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg cursor-pointer truncate">
-                    API Integration Help
+                  <div className="flex items-center justify-between px-2 mb-2">
+                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Conversations</h3>
+                    <button
+                      onClick={createNewConversation}
+                      className="p-1 text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                      title="New Conversation"
+                    >
+                      <Plus size={16} />
+                    </button>
                   </div>
+
+                  {loadingConversations ? (
+                    <div className="px-3 py-2 text-sm text-gray-400">Loading...</div>
+                  ) : conversations.length === 0 ? (
+                    <div className="px-3 py-2 text-xs text-gray-400">
+                      No conversations yet. Start chatting!
+                    </div>
+                  ) : (
+                    <div className="space-y-1 max-h-64 overflow-y-auto">
+                      {conversations.slice(0, 10).map((conv) => (
+                        <div
+                          key={conv.id}
+                          onClick={() => loadConversation(conv.id)}
+                          className={cn(
+                            "group flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors relative",
+                            currentConversationId === conv.id
+                              ? "bg-primary-50 text-primary-700"
+                              : "text-gray-600 hover:bg-gray-50"
+                          )}
+                          title={conv.title} // Show full title on hover
+                        >
+                          <MessageSquare size={14} className="shrink-0" />
+                          <div className="flex-1 min-w-0">
+                            <div className="truncate font-medium">{conv.title}</div>
+                            <div className="text-xs text-gray-400 mt-0.5">
+                              {new Date(conv.updated_at).toLocaleDateString()} • {conv.context_type}
+                            </div>
+                          </div>
+                          <span className="text-xs text-gray-400 shrink-0">{conv.message_count || 0}</span>
+                          <button
+                            onClick={(e) => deleteConversation(conv.id, e)}
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 hover:text-red-600 rounded transition-all shrink-0"
+                            title="Delete conversation"
+                          >
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 

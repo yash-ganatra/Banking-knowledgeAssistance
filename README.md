@@ -42,6 +42,14 @@ The **Banking Knowledge Assistant** is a sophisticated Retrieval-Augmented Gener
 - JavaScript frontend code (React)
 - Blade templates (Laravel views)
 
+✅ **Chat History & Session Management** 🆕
+- PostgreSQL-backed persistent chat history
+- Multiple conversation support with automatic title generation
+- Smart conversation preview (shows date, context type, message count)
+- Auto-naming: First user question becomes conversation title
+- Context-aware conversation tracking
+- Scalable single-user to multi-user architecture
+
 ✅ **Advanced Retrieval Techniques**
 - Hybrid semantic + keyword search
 - Cross-encoder re-ranking for accuracy
@@ -1176,8 +1184,38 @@ http://localhost:8000
 
 - Python 3.8+
 - Node.js 16+
+- PostgreSQL 12+ (for chat history)
 - 8GB+ RAM (for embedding models)
 - 10GB+ disk space (for models and vector DBs)
+
+---
+
+### Quick Start
+
+```bash
+# 1. Clone and navigate to project
+cd Banking-knowledgeAssistance
+
+# 2. Run automated database setup
+./setup_database.sh
+
+# 3. Install Python dependencies
+pip install -r requirements.txt
+
+# 4. Edit .env file and add your GROQ_API_KEY
+nano .env
+
+# 5. Start backend (auto-creates database tables)
+cd backend
+python main.py
+
+# 6. Start frontend (in new terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+**📚 For detailed chat history setup, see [CHAT_HISTORY_GUIDE.md](./CHAT_HISTORY_GUIDE.md)**
 
 ---
 
@@ -1194,11 +1232,16 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Set up environment variables
-cp .env.example .env
-nano .env  # Add your GROQ_API_KEY
+# 4. Set up PostgreSQL database (see DATABASE_SETUP.md for details)
+# Quick setup:
+createdb banking_assistant
+# Or run: ./setup_database.sh
 
-# 5. Verify vector databases exist
+# 5. Set up environment variables
+cp .env.example .env
+nano .env  # Add your GROQ_API_KEY and DATABASE_URL
+
+# 6. Verify vector databases exist
 ls -la vector_db/
 # Should see:
 #   - business_docs_chroma_db/
@@ -1206,7 +1249,7 @@ ls -la vector_db/
 #   - js_chroma_db/
 #   - blade_views_chroma_db/
 
-# 6. Start backend server
+# 7. Start backend server (creates database tables automatically)
 cd backend
 python main.py
 

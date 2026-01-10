@@ -4,7 +4,7 @@ import sys
 import json
 import logging
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, HTTPException, Body
+from fastapi import FastAPI, HTTPException, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import chromadb
@@ -14,6 +14,7 @@ from FlagEmbedding import BGEM3FlagModel
 from groq import Groq
 from dotenv import load_dotenv
 import uvicorn
+from sqlalchemy.orm import Session
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -27,6 +28,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import BladeDescriptionEngine
 from utils.blade_description_engine import BladeDescriptionEngine
+
+# Import database modules
+import database
+import crud
+from models import MessageRole
 
 app = FastAPI(title="Banking Knowledge Assistant API")
 
@@ -55,6 +61,7 @@ class QueryRequest(BaseModel):
     query: str
     top_k: int = 5
     rerank: bool = True
+    conversation_id: Optional[int] = None  # Optional conversation ID to save to
 
 class QueryResponse(BaseModel):
     results: List[Dict[str, Any]]
@@ -180,6 +187,17 @@ llm_service = None
 def startup_event():
     global business_engine, php_engine, js_engine, blade_engine, llm_service
     
+    # Initialize Database
+    try:
+        database.init_db()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.error(f"Failed to initialize database: {e}")
+    
+    # Include chat history routes
+    from routers.chat_routes import router as chat_router
+    app.include_router(chat_router)
+    
     # Initialize Business Engine
     try:
         business_engine = BusinessQueryEngine()
@@ -225,7 +243,7 @@ def format_context(results: List[Dict]) -> str:
 # --- Endpoints ---
 
 @app.post("/inference/business", response_model=QueryResponse)
-async def inference_business(request: QueryRequest):
+async def inference_business(request: QueryRequest, db: Session = Depends(database.get_db)):
     if not business_engine:
         raise HTTPException(status_code=503, detail="Business engine not initialized")
     
@@ -236,11 +254,22 @@ async def inference_business(request: QueryRequest):
     if llm_service:
         system_prompt = "You are an expert banking assistant. Answer the user query based strictly on the provided business documentation context. If the provided context contains Mermaid JS diagram code, you MUST include it in your response wrapped in a mermaid code block."
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
+    
+    # Save to database if conversation_id provided
+    if request.conversation_id:
+        try:
+            # Save user message
+            crud.create_message(db, request.conversation_id, MessageRole.USER, request.query)
+            # Save bot response
+            if llm_response:
+                crud.create_message(db, request.conversation_id, MessageRole.BOT, llm_response, context)
+        except Exception as e:
+            logger.error(f"Error saving to database: {e}")
         
     return QueryResponse(results=results, llm_response=llm_response, context_used=context)
 
 @app.post("/inference/php", response_model=QueryResponse)
-async def inference_php(request: QueryRequest):
+async def inference_php(request: QueryRequest, db: Session = Depends(database.get_db)):
     if not php_engine:
         raise HTTPException(status_code=503, detail="PHP engine not initialized")
     
@@ -251,11 +280,20 @@ async def inference_php(request: QueryRequest):
     if llm_service:
         system_prompt = "You are an expert PHP Laravel developer. Answer the user query based strictly on the provided PHP code context. Do not hallucinate."
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
+    
+    # Save to database if conversation_id provided
+    if request.conversation_id:
+        try:
+            crud.create_message(db, request.conversation_id, MessageRole.USER, request.query)
+            if llm_response:
+                crud.create_message(db, request.conversation_id, MessageRole.BOT, llm_response, context)
+        except Exception as e:
+            logger.error(f"Error saving to database: {e}")
         
     return QueryResponse(results=results, llm_response=llm_response, context_used=context)
 
 @app.post("/inference/js", response_model=QueryResponse)
-async def inference_js(request: QueryRequest):
+async def inference_js(request: QueryRequest, db: Session = Depends(database.get_db)):
     if not js_engine:
         raise HTTPException(status_code=503, detail="JS engine not initialized")
     
@@ -266,11 +304,20 @@ async def inference_js(request: QueryRequest):
     if llm_service:
         system_prompt = "You are an expert JavaScript/React developer. Answer the user query based strictly on the provided JS code context. Do not hallucinate."
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
+    
+    # Save to database if conversation_id provided
+    if request.conversation_id:
+        try:
+            crud.create_message(db, request.conversation_id, MessageRole.USER, request.query)
+            if llm_response:
+                crud.create_message(db, request.conversation_id, MessageRole.BOT, llm_response, context)
+        except Exception as e:
+            logger.error(f"Error saving to database: {e}")
         
     return QueryResponse(results=results, llm_response=llm_response, context_used=context)
 
 @app.post("/inference/blade", response_model=QueryResponse)
-async def inference_blade(request: QueryRequest):
+async def inference_blade(request: QueryRequest, db: Session = Depends(database.get_db)):
     if not blade_engine:
         raise HTTPException(status_code=503, detail="Blade engine not initialized")
     
@@ -301,6 +348,15 @@ Guidelines:
 4. Be concise but thorough
 5. If context is insufficient, say so"""
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
+    
+    # Save to database if conversation_id provided
+    if request.conversation_id:
+        try:
+            crud.create_message(db, request.conversation_id, MessageRole.USER, request.query)
+            if llm_response:
+                crud.create_message(db, request.conversation_id, MessageRole.BOT, llm_response, context)
+        except Exception as e:
+            logger.error(f"Error saving to database: {e}")
     
     # Convert blade results to standard format
     formatted_results = [{
