@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
-export function BackgroundEffects() {
+export function BackgroundEffects({ isDarkMode }) {
     const [particles, setParticles] = useState([]);
 
     useEffect(() => {
@@ -23,7 +23,7 @@ export function BackgroundEffects() {
             {/* Subtle Grid Background */}
             <div className="absolute inset-0 opacity-[0.03]"
                 style={{
-                    backgroundImage: `linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)`,
+                    backgroundImage: `linear-gradient(${isDarkMode ? '#fff' : '#000'} 1px, transparent 1px), linear-gradient(90deg, ${isDarkMode ? '#fff' : '#000'} 1px, transparent 1px)`,
                     backgroundSize: '40px 40px'
                 }}
             />
@@ -32,7 +32,7 @@ export function BackgroundEffects() {
             {particles.map((p) => (
                 <motion.div
                     key={p.id}
-                    className="absolute bg-primary-500/10 rounded-full blur-sm"
+                    className="absolute bg-primary-500/10 dark:bg-primary-400/20 rounded-full blur-sm"
                     style={{
                         width: p.size,
                         height: p.size,
@@ -54,8 +54,8 @@ export function BackgroundEffects() {
             ))}
 
             {/* Large Ambient Gradient Orbs */}
-            <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-primary-200/20 rounded-full blur-[100px] animate-pulse" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-blue-100/30 rounded-full blur-[120px]" />
+            <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-primary-200/20 dark:bg-primary-900/20 rounded-full blur-[100px] animate-pulse" />
+            <div className="absolute bottom-[-10%] right-[-10%] w-[600px] h-[600px] bg-blue-100/30 dark:bg-blue-900/20 rounded-full blur-[120px]" />
         </div>
     );
 }

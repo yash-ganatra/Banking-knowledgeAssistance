@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode, Plus, Trash2, MessageSquare } from 'lucide-react';
+import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Moon, Sun } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RotatingCube } from './components/RotatingCube';
 import { BackgroundEffects } from './components/BackgroundEffects';
@@ -10,6 +10,25 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('theme');
+      if (saved) return saved === 'dark';
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('theme', 'light');
+    }
+  }, [isDarkMode]);
+
   const [selectedContext, setSelectedContext] = useState('business'); // business, php, js, blade
   const [messages, setMessages] = useState([
     {
@@ -22,7 +41,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasUserInteracted, setHasUserInteracted] = useState(false);
   const messagesEndRef = useRef(null);
-  
+
   // Chat history state
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
@@ -78,7 +97,7 @@ function App() {
         const data = await response.json();
         setCurrentConversationId(conversationId);
         setSelectedContext(data.context_type);
-        
+
         // Convert messages to frontend format
         const loadedMessages = data.messages.map(msg => ({
           id: msg.id,
@@ -97,7 +116,7 @@ function App() {
         } else {
           setMessages(loadedMessages);
         }
-        
+
         setHasUserInteracted(loadedMessages.length > 0);
       }
     } catch (error) {
@@ -108,7 +127,7 @@ function App() {
   // Delete a conversation
   const deleteConversation = async (conversationId, event) => {
     event.stopPropagation(); // Prevent triggering loadConversation
-    
+
     if (!confirm('Are you sure you want to delete this conversation?')) {
       return;
     }
@@ -120,7 +139,7 @@ function App() {
 
       if (response.ok) {
         setConversations(prev => prev.filter(c => c.id !== conversationId));
-        
+
         // If we deleted the current conversation, reset
         if (conversationId === currentConversationId) {
           setCurrentConversationId(null);
@@ -203,9 +222,9 @@ function App() {
       const response = await fetch(`http://localhost:8000/inference/${selectedContext}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          query: newMessage.content, 
-          top_k: 5, 
+        body: JSON.stringify({
+          query: newMessage.content,
+          top_k: 5,
           rerank: true,
           conversation_id: convId  // Include conversation ID
         })
@@ -222,10 +241,10 @@ function App() {
       };
 
       setMessages(prev => [...prev, botResponse]);
-      
+
       // Refresh conversations list to update message count
       loadConversations();
-      
+
     } catch (error) {
       console.error("Error:", error);
       setMessages(prev => [...prev, {
@@ -239,9 +258,9 @@ function App() {
   };
 
   return (
-    <div className="relative min-h-screen bg-white text-gray-800 font-sans overflow-hidden">
+    <div className="relative min-h-screen bg-white dark:bg-gray-950 text-gray-800 dark:text-gray-100 font-sans overflow-hidden">
       {/* Background Cube and Effects */}
-      <BackgroundEffects />
+      <BackgroundEffects isDarkMode={isDarkMode} />
       <AnimatePresence>
         {!hasUserInteracted && (
           <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none">
@@ -258,9 +277,9 @@ function App() {
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 280, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              className="h-full bg-white/80 backdrop-blur-md border-r border-gray-200 shadow-xl flex flex-col"
+              className="h-full bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-r border-gray-200 dark:border-gray-800 shadow-xl flex flex-col"
             >
-              <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+              <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white overflow-visible">
                     {hasUserInteracted ? (
@@ -269,10 +288,10 @@ function App() {
                       <Shield size={18} />
                     )}
                   </div>
-                  <span className="font-bold text-gray-800 tracking-tight">Cube AI</span>
+                  <span className="font-bold text-gray-800 dark:text-white tracking-tight">Cube AI</span>
                 </div>
-                <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-1 text-gray-500 hover:bg-gray-100 rounded">
-                  <ChevronLeft size={20} />
+                <button onClick={() => setIsSidebarOpen(false)} className="p-1 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded" title="Close Sidebar">
+                  <PanelLeftClose size={20} />
                 </button>
               </div>
 
@@ -289,8 +308,8 @@ function App() {
                         className={cn(
                           "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
                           selectedContext === ctx.id
-                            ? "bg-primary-100 text-primary-700 ring-1 ring-primary-200"
-                            : "text-gray-700 hover:bg-gray-50"
+                            ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800"
+                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                         )}
                       >
                         <span className={selectedContext === ctx.id ? "text-primary-600" : "text-gray-500"}>
@@ -307,22 +326,22 @@ function App() {
 
                 <div className="space-y-1">
                   <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Capabilities</h3>
-                  <div className="group flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-primary-50 hover:text-primary-700 cursor-pointer transition-colors">
+                  <div className="group flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-300 cursor-pointer transition-colors">
                     <Code size={18} />
                     <span>Code Analysis</span>
                   </div>
-                  <div className="group flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-primary-50 hover:text-primary-700 cursor-pointer transition-colors">
+                  <div className="group flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-300 cursor-pointer transition-colors">
                     <Shield size={18} />
                     <span>Security Audit</span>
                   </div>
                 </div>
 
-                <div className="space-y-1 pt-4 border-t border-gray-100">
+                <div className="space-y-1 pt-4 border-t border-gray-100 dark:border-gray-800">
                   <div className="flex items-center justify-between px-2 mb-2">
                     <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Conversations</h3>
                     <button
                       onClick={createNewConversation}
-                      className="p-1 text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                      className="p-1 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition-colors"
                       title="New Conversation"
                     >
                       <Plus size={16} />
@@ -344,8 +363,8 @@ function App() {
                           className={cn(
                             "group flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors relative",
                             currentConversationId === conv.id
-                              ? "bg-primary-50 text-primary-700"
-                              : "text-gray-600 hover:bg-gray-50"
+                              ? "bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300"
+                              : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
                           )}
                           title={conv.title} // Show full title on hover
                         >
@@ -359,7 +378,7 @@ function App() {
                           <span className="text-xs text-gray-400 shrink-0">{conv.message_count || 0}</span>
                           <button
                             onClick={(e) => deleteConversation(conv.id, e)}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 hover:text-red-600 rounded transition-all shrink-0"
+                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 rounded transition-all shrink-0"
                             title="Delete conversation"
                           >
                             <Trash2 size={12} />
@@ -371,14 +390,21 @@ function App() {
                 </div>
               </div>
 
-              <div className="p-4 border-t border-gray-100">
+              <div className="p-4 border-t border-gray-100 dark:border-gray-800 space-y-4">
+                <button
+                  onClick={() => setIsDarkMode(!isDarkMode)}
+                  className="flex items-center gap-3 w-full px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
+                  <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
+                </button>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center text-primary-600">
+                  <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-primary-600 dark:text-primary-400">
                     <User size={20} />
                   </div>
                   <div>
-                    <p className="text-sm font-medium text-gray-900">Developer</p>
-                    <p className="text-xs text-gray-500">Pro Account</p>
+                    <p className="text-sm font-medium text-gray-900 dark:text-white">Developer</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">Pro Account</p>
                   </div>
                 </div>
               </div>
@@ -388,14 +414,14 @@ function App() {
 
         {/* Main Chat Area */}
         <main className="flex-1 flex flex-col h-full relative">
-          <header className="h-16 px-6 flex items-center justify-between bg-white/50 backdrop-blur-sm border-b border-gray-100/50">
+          <header className="h-16 px-6 flex items-center justify-between bg-white/50 dark:bg-gray-950/50 backdrop-blur-sm border-b border-gray-100/50 dark:border-gray-800/50">
             <div className="flex items-center gap-3">
               {!isSidebarOpen && (
-                <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
-                  <Menu size={20} />
+                <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-lg transition-colors" title="Open Sidebar">
+                  <PanelLeft size={20} />
                 </button>
               )}
-              <h1 className="font-semibold text-gray-800">Banking Assistant</h1>
+              <h1 className="font-semibold text-gray-800 dark:text-white">Banking Assistant</h1>
             </div>
           </header>
 
@@ -421,19 +447,19 @@ function App() {
                   "p-4 rounded-2xl shadow-sm text-sm leading-relaxed overflow-hidden",
                   message.role === 'user'
                     ? "bg-primary-600 text-white rounded-tr-none"
-                    : "bg-white/80 backdrop-blur-sm border border-gray-100 rounded-tl-none text-gray-700"
+                    : "bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-100 dark:border-gray-800 rounded-tl-none text-gray-700 dark:text-gray-300"
                 )}>
                   {message.role === 'user' ? (
                     <div className="whitespace-pre-wrap">{message.content}</div>
                   ) : (
-                    <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0.5 text-gray-700">
+                    <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0.5 text-gray-700 dark:text-gray-300 dark:prose-headings:text-gray-100 dark:prose-strong:text-gray-100 dark:prose-code:text-gray-100 dark:prose-pre:bg-gray-800 dark:prose-pre:border-gray-700">
                       <ReactMarkdown
                         components={{
                           code(props) {
                             const { children, className, node, ...rest } = props;
                             const match = /language-(\w+)/.exec(className || '');
                             if (match && match[1] === 'mermaid') {
-                              return <MermaidDiagram code={String(children).replace(/\n$/, '')} />;
+                              return <MermaidDiagram code={String(children).replace(/\n$/, '')} isDarkMode={isDarkMode} />;
                             }
                             return (
                               <code {...rest} className={className}>
@@ -449,10 +475,10 @@ function App() {
                   )}
 
                   {message.context_used && (
-                    <div className="mt-4 pt-4 border-t border-gray-200/50">
-                      <details className="text-xs text-gray-500 cursor-pointer">
-                        <summary className="hover:text-primary-600 font-medium">View Source Context</summary>
-                        <div className="mt-2 p-2 bg-gray-50 rounded border border-gray-100 font-mono text-[10px] overflow-x-auto max-h-60">
+                    <div className="mt-4 pt-4 border-t border-gray-200/50 dark:border-gray-700/50">
+                      <details className="text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
+                        <summary className="hover:text-primary-600 dark:hover:text-primary-400 font-medium">View Source Context</summary>
+                        <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700 font-mono text-[10px] overflow-x-auto max-h-60">
                           <div className="prose prose-xs max-w-none">
                             <ReactMarkdown
                               components={{
@@ -483,10 +509,10 @@ function App() {
 
             {isLoading && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-4 max-w-3xl mr-auto">
-                <div className="w-10 h-10 rounded-full bg-white text-primary-600 border border-gray-100 flex items-center justify-center shrink-0 shadow-sm">
+                <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-900 text-primary-600 border border-gray-100 dark:border-gray-800 flex items-center justify-center shrink-0 shadow-sm">
                   <Bot size={20} />
                 </div>
-                <div className="bg-white/80 backdrop-blur-sm border border-gray-100 p-4 rounded-2xl rounded-tl-none">
+                <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-100 dark:border-gray-800 p-4 rounded-2xl rounded-tl-none">
                   <div className="flex gap-1">
                     <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
                     <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
@@ -500,16 +526,16 @@ function App() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="p-4 lg:p-8 bg-gradient-to-t from-white via-white/80 to-transparent">
+          <div className="p-4 lg:p-8 bg-gradient-to-t from-white via-white/80 to-transparent dark:from-gray-950 dark:via-gray-950/80">
             <div className="max-w-4xl mx-auto relative group">
               <div className="absolute -inset-1 bg-gradient-to-r from-primary-400 to-primary-600 rounded-xl blur opacity-20 group-hover:opacity-30 transition duration-1000 group-hover:duration-200" />
-              <form onSubmit={handleSendMessage} className="relative flex items-center gap-2 bg-white rounded-xl shadow-lg border border-gray-100 p-2">
+              <form onSubmit={handleSendMessage} className="relative flex items-center gap-2 bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-100 dark:border-gray-800 p-2">
                 <input
                   type="text"
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   placeholder={`Ask about ${contexts.find(c => c.id === selectedContext)?.label}...`}
-                  className="flex-1 px-4 py-2 bg-transparent text-gray-800 placeholder-gray-400 focus:outline-none"
+                  className="flex-1 px-4 py-2 bg-transparent text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none"
                 />
                 <button
                   type="submit"

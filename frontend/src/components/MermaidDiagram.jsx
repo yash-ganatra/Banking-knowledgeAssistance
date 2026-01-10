@@ -33,11 +33,30 @@ class MermaidErrorBoundary extends Component {
     }
 }
 
-export const MermaidDiagramInternal = ({ code }) => {
+export const MermaidDiagramInternal = ({ code, isDarkMode }) => {
     const elementRef = useRef(null);
     const [svg, setSvg] = useState('');
     const [isRendering, setIsRendering] = useState(false);
     const [renderError, setRenderError] = useState(false);
+
+    useEffect(() => {
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: isDarkMode ? 'dark' : 'default',
+            securityLevel: 'loose',
+            themeVariables: isDarkMode ? {
+                darkMode: true,
+                background: '#1e293b', // gray-900 (approx)
+                primaryColor: '#0ea5e9', // primary-500
+                secondaryColor: '#334155', // gray-700
+                tertiaryColor: '#475569', // gray-600
+                primaryTextColor: '#f1f5f9', // gray-100
+                secondaryTextColor: '#f1f5f9',
+                tertiaryTextColor: '#f1f5f9',
+                lineColor: '#94a3b8', // gray-400
+            } : undefined
+        });
+    }, [isDarkMode]);
 
     useEffect(() => {
         if (!code || !code.trim()) {
@@ -70,7 +89,7 @@ export const MermaidDiagramInternal = ({ code }) => {
         }, 500); // 500ms debounce
 
         return () => clearTimeout(timeoutId);
-    }, [code]);
+    }, [code, isDarkMode]);
 
     // If no code, or whitespace only, render nothing
     if (!code || !code.trim()) return null;
@@ -91,7 +110,7 @@ export const MermaidDiagramInternal = ({ code }) => {
     return (
         <div
             ref={elementRef}
-            className="my-4 flex justify-center bg-white p-4 rounded-lg border border-gray-100 shadow-sm overflow-x-auto min-h-[50px] transition-all"
+            className="my-4 flex justify-center bg-white dark:bg-gray-900/50 p-4 rounded-lg border border-gray-100 dark:border-gray-800 shadow-sm overflow-x-auto min-h-[50px] transition-all"
             dangerouslySetInnerHTML={{ __html: svg }}
             style={{ opacity: isRendering ? 0.5 : 1 }}
         />
