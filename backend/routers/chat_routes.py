@@ -10,8 +10,9 @@ from pydantic import BaseModel
 from datetime import datetime
 
 from database import get_db
-from models import MessageRole
+from models import MessageRole, User
 import crud
+from auth import get_current_user
 
 router = APIRouter(prefix="/api/chat", tags=["chat-history"])
 
@@ -67,14 +68,13 @@ class ConversationDetailResponse(ConversationResponse):
 @router.post("/conversations", response_model=ConversationResponse, status_code=status.HTTP_201_CREATED)
 def create_conversation(
     conversation: ConversationCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Create a new conversation for the default user.
-    In multi-user mode, this would accept user_id from authentication.
+    Create a new conversation for the authenticated user.
     """
-    # Get default user (for single-user mode)
-    user = crud.get_default_user(db)
+    user = current_user
     
     new_conversation = crud.create_conversation(
         db=db,
@@ -93,13 +93,14 @@ def create_conversation(
 def get_conversations(
     include_archived: bool = False,
     limit: int = 50,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Get all conversations for the default user.
+    Get all conversations for the authenticated user.
     Returns conversations ordered by most recent activity.
     """
-    user = crud.get_default_user(db)
+    user = current_user
     conversations = crud.get_user_conversations(
         db=db,
         user_id=user.id,
@@ -121,12 +122,13 @@ def get_conversations(
 @router.get("/conversations/{conversation_id}", response_model=ConversationDetailResponse)
 def get_conversation(
     conversation_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get a specific conversation with all its messages.
     """
-    user = crud.get_default_user(db)
+    user = current_user
     conversation = crud.get_conversation(db=db, conversation_id=conversation_id, user_id=user.id)
     
     if not conversation:
@@ -157,12 +159,13 @@ def get_conversation(
 def update_conversation(
     conversation_id: int,
     update_data: ConversationUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Update a conversation (currently only title).
     """
-    user = crud.get_default_user(db)
+    user = current_user
     
     if update_data.title:
         conversation = crud.update_conversation_title(
@@ -189,12 +192,13 @@ def update_conversation(
 @router.delete("/conversations/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_conversation(
     conversation_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Delete a conversation and all its messages.
     """
-    user = crud.get_default_user(db)
+    user = current_user
     deleted = crud.delete_conversation(db=db, conversation_id=conversation_id, user_id=user.id)
     
     if not deleted:
@@ -209,12 +213,13 @@ def delete_conversation(
 @router.post("/conversations/{conversation_id}/archive", response_model=ConversationResponse)
 def archive_conversation(
     conversation_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Archive a conversation (soft delete).
     """
-    user = crud.get_default_user(db)
+    user = current_user
     conversation = crud.archive_conversation(db=db, conversation_id=conversation_id, user_id=user.id)
     
     if not conversation:
@@ -235,12 +240,13 @@ def archive_conversation(
 def create_message(
     conversation_id: int,
     message: MessageCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Add a message to a conversation.
     """
-    user = crud.get_default_user(db)
+    user = current_user
     conversation = crud.get_conversation(db=db, conversation_id=conversation_id, user_id=user.id)
     
     if not conversation:
@@ -280,12 +286,13 @@ def create_message(
 def get_messages(
     conversation_id: int,
     limit: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get all messages for a conversation.
     """
-    user = crud.get_default_user(db)
+    user = current_user
     conversation = crud.get_conversation(db=db, conversation_id=conversation_id, user_id=user.id)
     
     if not conversation:

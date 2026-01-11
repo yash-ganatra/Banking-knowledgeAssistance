@@ -20,8 +20,13 @@ def get_user_by_id(db: Session, user_id: int) -> Optional[User]:
 
 
 def get_user_by_username(db: Session, username: str) -> Optional[User]:
-    """Get user by username"""
-    return db.query(User).filter(User.username == username).first()
+    """Get user by username (case-insensitive)"""
+    return db.query(User).filter(User.username.ilike(username)).first()
+
+
+def get_user_by_email(db: Session, email: str) -> Optional[User]:
+    """Get user by email (case-insensitive)"""
+    return db.query(User).filter(User.email.ilike(email)).first()
 
 
 def get_default_user(db: Session) -> User:
@@ -43,10 +48,29 @@ def get_default_user(db: Session) -> User:
 
 def create_user(db: Session, username: str, email: Optional[str] = None, 
                 full_name: Optional[str] = None, role: UserRole = UserRole.TEAM_MEMBER) -> User:
-    """Create a new user"""
+    """Create a new user (legacy - without password)"""
     user = User(
         username=username,
         email=email,
+        full_name=full_name,
+        role=role,
+        is_active=True,
+        hashed_password=""  # Default empty for legacy users
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def create_user_with_password(db: Session, username: str, email: str, 
+                               hashed_password: str, full_name: Optional[str] = None,
+                               role: UserRole = UserRole.TEAM_MEMBER) -> User:
+    """Create a new user with password (for authentication)"""
+    user = User(
+        username=username.lower(),  # Store in lowercase for case-insensitive login
+        email=email.lower(),  # Also normalize email
+        hashed_password=hashed_password,
         full_name=full_name,
         role=role,
         is_active=True

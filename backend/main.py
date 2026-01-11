@@ -194,6 +194,10 @@ def startup_event():
     except Exception as e:
         logger.error(f"Failed to initialize database: {e}")
     
+    # Include authentication routes
+    from routers.auth_routes import router as auth_router
+    app.include_router(auth_router)
+    
     # Include chat history routes
     from routers.chat_routes import router as chat_router
     app.include_router(chat_router)

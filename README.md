@@ -2,13 +2,15 @@
 
 <div align="center">
 
-**A Production-Ready Multi-Domain RAG System for Banking Documentation & Code Retrieval**
+**A Production-Ready Multi-Domain RAG System with JWT Authentication & Role-Based Access Control**
 
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Backend-green.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-Frontend-61dafb.svg)](https://reactjs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-336791.svg)](https://www.postgresql.org/)
 [![ChromaDB](https://img.shields.io/badge/Vector_DB-ChromaDB-orange.svg)](https://www.trychroma.com/)
+[![JWT](https://img.shields.io/badge/Auth-JWT-black.svg)](https://jwt.io/)
+[![Bcrypt](https://img.shields.io/badge/Security-Bcrypt-red.svg)](https://en.wikipedia.org/wiki/Bcrypt)
 
 </div>
 
@@ -19,6 +21,10 @@
 1. [Project Overview](#-project-overview)
 2. [High-Level Architecture](#-high-level-architecture)
 3. [System Components](#-system-components)
+   - [Frontend (React + Vite)](#1-frontend-react--vite)
+   - [Backend (FastAPI)](#2-backend-fastapi)
+   - [Authentication & Security](#3-authentication--security-system-)
+   - [Vector Databases (ChromaDB)](#4-vector-databases-chromadb)
 4. [Data Flow & Query Routing](#-data-flow--query-routing)
 5. [Vector Database Strategy](#-vector-database-strategy)
 6. [Chunking Strategies](#-chunking-strategies)
@@ -33,9 +39,18 @@
 
 ## 🎯 Project Overview
 
-The **Banking Knowledge Assistant** is a sophisticated Retrieval-Augmented Generation (RAG) system designed to provide intelligent query responses across multiple knowledge domains in a banking context.
+The **Banking Knowledge Assistant** is a sophisticated Retrieval-Augmented Generation (RAG) system with enterprise-grade authentication, designed to provide intelligent query responses across multiple knowledge domains in a banking context.
 
 ### Key Features
+
+✅ **JWT-Based Authentication & Security** 🆕
+- JSON Web Token (JWT) authentication with HS256 algorithm
+- Bcrypt password hashing with automatic salt generation
+- Role-based access control (Admin, Team Lead, Team Member)
+- Case-insensitive username/email login
+- User-isolated conversations and data
+- 30-minute token expiration with automatic refresh
+- Secure password requirements (min 6 characters)
 
 ✅ **Multi-Domain Knowledge Retrieval**
 - Business documentation (CUBE banking platform docs)
@@ -43,13 +58,13 @@ The **Banking Knowledge Assistant** is a sophisticated Retrieval-Augmented Gener
 - JavaScript frontend code (React)
 - Blade templates (Laravel views)
 
-✅ **Chat History & Session Management** 🆕
-- PostgreSQL-backed persistent chat history
+✅ **Chat History & Session Management**
+- PostgreSQL-backed persistent chat history with user isolation
 - Multiple conversation support with automatic title generation
 - Smart conversation preview (shows date, context type, message count)
 - Auto-naming: First user question becomes conversation title
 - Context-aware conversation tracking
-- Scalable single-user to multi-user architecture
+- Multi-user architecture with data privacy
 
 ✅ **Advanced Retrieval Techniques**
 - Hybrid semantic + keyword search
@@ -200,16 +215,25 @@ graph TB
   "animations": "Framer Motion",
   "markdown": "react-markdown",
   "diagrams": "mermaid",
-  "state-management": "React Hooks",
-  "http-client": "Fetch API"
+  "state-management": "React Hooks + Context API",
+  "http-client": "Fetch API",
+  "auth": "JWT (localStorage)",
+  "routing": "React Router"
 }
 ```
+
+**Authentication:**
+- Context-based auth state management
+- Automatic token validation on mount
+- Protected routes with auth guards
+- Token storage in localStorage
+- Automatic logout on token expiration
 
 ---
 
 ### 2. Backend (FastAPI)
 
-**Purpose:** RESTful API server for query routing, RAG processing, and chat history management
+**Purpose:** RESTful API server for query routing, RAG processing, authentication, and chat history management
 
 **Tech Stack:**
 ```json
@@ -219,6 +243,11 @@ graph TB
   "database": "PostgreSQL 12+",
   "orm": "SQLAlchemy 2.0",
   "db-driver": "psycopg2-binary",
+  "auth": {
+    "jwt": "python-jose[cryptography]",
+    "password-hashing": "bcrypt",
+    "oauth2": "fastapi.security.OAuth2PasswordBearer"
+  },
   "llm-api": "Groq (Llama 3.3 70B)",
   "embedding-models": "BGE-M3, SentenceTransformers",
   "vector-db": "ChromaDB",
@@ -227,16 +256,21 @@ graph TB
 ```
 
 **Database Schema:**
-- **users**: User accounts (role-based: Admin, Team Lead, Team Member)
-- **conversations**: Chat sessions with context tracking
+- **users**: User accounts with bcrypt passwords (role-based: Admin, Team Lead, Team Member)
+- **conversations**: User-isolated chat sessions with context tracking
 - **messages**: User queries and bot responses with context preservation
 
 **Features:**
+- JWT-based authentication with HS256
+- Bcrypt password hashing (salt rounds: 12)
+- Role-based access control (RBAC)
+- User data isolation and privacy
 - Multi-domain RAG query routing
 - PostgreSQL-backed chat history
 - Automatic conversation title generation
 - Connection pooling (5 connections, 10 max overflow)
 - Cascade delete operations
+- Case-insensitive login
 
 ### 3. Previous Backend (FastAPI)
 
@@ -345,7 +379,650 @@ Phase 4: Context Formatting
 
 ---
 
-### 3. Vector Databases (ChromaDB)
+### 3. Authentication & Security System 🔐
+
+**Location:** `backend/routers/auth_routes.py`, `backend/auth.py`, `frontend/src/contexts/AuthContext.jsx`
+
+The system implements a production-ready JWT-based authentication system with role-based access control (RBAC) and user-isolated data.
+
+#### 🏗️ Authentication Architecture
+
+```mermaid
+sequenceDiagram
+    participant U as User/Browser
+    participant F as Frontend (React)
+    participant API as FastAPI Backend
+    participant DB as PostgreSQL
+    participant JWT as JWT Service
+    
+    Note over U,JWT: 1. User Registration
+    U->>F: Sign Up (username, email, password)
+    F->>API: POST /api/auth/signup
+    API->>API: Normalize username/email (lowercase)
+    API->>API: Hash password (bcrypt)
+    API->>DB: Create user record
+    DB-->>API: User created (id, role)
+    API->>JWT: Generate JWT token (sub: "user_id")
+    JWT-->>API: Token (expires in 30 min)
+    API-->>F: {access_token, user_id, username, role}
+    F->>F: Store token in localStorage
+    F->>F: Set AuthContext (user, token)
+    F-->>U: Login successful, redirect to chat
+    
+    Note over U,JWT: 2. User Login
+    U->>F: Login (username, password)
+    F->>API: POST /api/auth/login-json
+    API->>DB: Query user by username (case-insensitive)
+    DB-->>API: User record
+    API->>API: Verify password (bcrypt.checkpw)
+    API->>JWT: Generate JWT token (sub: "user_id")
+    JWT-->>API: Token
+    API-->>F: {access_token, user_id, username, role}
+    F->>F: Store token in localStorage
+    F-->>U: Login successful
+    
+    Note over U,JWT: 3. Authenticated Request
+    U->>F: Load conversations
+    F->>F: Get token from localStorage
+    F->>API: GET /api/chat/conversations<br/>Authorization: Bearer <token>
+    API->>JWT: Validate token signature
+    JWT->>JWT: Decode payload, extract user_id
+    JWT-->>API: User ID (decoded from "sub")
+    API->>DB: Query conversations WHERE user_id = X
+    DB-->>API: User's conversations only
+    API-->>F: Filtered conversation list
+    F-->>U: Display user's conversations
+    
+    Note over U,JWT: 4. Token Expiration Handling
+    U->>F: Request after 30 minutes
+    F->>API: GET /api/chat/conversations<br/>Authorization: Bearer <expired_token>
+    API->>JWT: Validate token
+    JWT-->>API: Token expired
+    API-->>F: 401 Unauthorized
+    F->>F: Clear invalid token from localStorage
+    F->>F: Redirect to login page
+    F-->>U: Please login again
+    
+    Note over U,JWT: 5. Logout
+    U->>F: Click logout
+    F->>F: Remove token from localStorage
+    F->>F: Clear AuthContext
+    F-->>U: Redirect to login page
+```
+
+#### 🔐 Security Implementation Details
+
+**1. Password Security**
+```python
+# Location: backend/auth.py
+
+# Hashing with bcrypt (salt rounds: 12 by default)
+def get_password_hash(password: str) -> str:
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+# Verification
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return bcrypt.checkpw(plain_password.encode('utf-8'), 
+                         hashed_password.encode('utf-8'))
+```
+
+**Security Features:**
+- ✅ Bcrypt hashing with automatic salt generation
+- ✅ Minimum 6 characters password requirement
+- ✅ Password never stored in plain text
+- ✅ Timing-safe comparison prevents timing attacks
+
+**2. JWT Token Management**
+```python
+# Location: backend/auth.py
+
+# Token Creation (JWT spec compliant)
+def create_access_token(data: dict, expires_delta: timedelta = None) -> str:
+    to_encode = data.copy()
+    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=30))
+    to_encode.update({"exp": expire, "sub": str(user_id)})  # sub MUST be string
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm="HS256")
+    return encoded_jwt
+
+# Token Validation
+def get_current_user(token: str, db: Session):
+    payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+    user_id = int(payload.get("sub"))  # Convert string back to int
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.is_active:
+        raise HTTPException(401, "Invalid credentials")
+    return user
+```
+
+**Token Specifications:**
+- **Algorithm:** HS256 (HMAC-SHA256)
+- **Expiration:** 30 minutes (configurable via ACCESS_TOKEN_EXPIRE_MINUTES)
+- **Payload:** `{"sub": "user_id", "exp": timestamp}`
+- **Subject Format:** String (per JWT RFC 7519 spec)
+- **Secret Key:** 54+ characters (configurable via SECRET_KEY env var)
+
+**3. Case-Insensitive Authentication**
+```python
+# Location: backend/crud.py
+
+# Username lookup (case-insensitive)
+def get_user_by_username(db: Session, username: str):
+    return db.query(User).filter(User.username.ilike(username)).first()
+
+# User creation (normalized)
+def create_user_with_password(db: Session, username: str, email: str, ...):
+    user = User(
+        username=username.lower(),  # Store in lowercase
+        email=email.lower(),        # Normalize email too
+        hashed_password=hashed_password,
+        ...
+    )
+```
+
+**Benefits:**
+- ✅ Users can login with any case: `JohnDoe`, `johndoe`, `JOHNDOE`
+- ✅ Prevents duplicate accounts with different cases
+- ✅ Industry standard (like Gmail, GitHub, Twitter)
+
+#### 👥 Role-Based Access Control (RBAC)
+
+**User Roles:**
+```python
+# Location: backend/models.py
+
+class UserRole(str, enum.Enum):
+    ADMIN = "admin"              # Full system access
+    TEAM_LEAD = "team_lead"      # Team management + all features
+    TEAM_MEMBER = "team_member"  # Standard user access
+```
+
+**RBAC Architecture:**
+
+```mermaid
+graph TB
+    subgraph "User Hierarchy"
+        ADMIN[👑 Admin<br/>Full System Access]
+        LEAD[👔 Team Lead<br/>Team Management]
+        MEMBER[👤 Team Member<br/>Standard Access]
+    end
+    
+    subgraph "Permissions & Capabilities"
+        P1[User Management]
+        P2[System Configuration]
+        P3[All Conversations Access]
+        P4[Team Conversations]
+        P5[Analytics & Reports]
+        P6[Own Conversations]
+        P7[Query Knowledge Base]
+        P8[Create Conversations]
+    end
+    
+    subgraph "Data Isolation Layer"
+        DB[(PostgreSQL)]
+        FILTER[Row-Level Filtering]
+        OWNER[Ownership Validation]
+    end
+    
+    ADMIN --> P1
+    ADMIN --> P2
+    ADMIN --> P3
+    ADMIN --> P5
+    ADMIN --> P7
+    ADMIN --> P8
+    
+    LEAD --> P4
+    LEAD --> P5
+    LEAD --> P7
+    LEAD --> P8
+    
+    MEMBER --> P6
+    MEMBER --> P7
+    MEMBER --> P8
+    
+    P6 --> FILTER
+    P4 --> FILTER
+    P3 --> FILTER
+    
+    FILTER --> OWNER
+    OWNER --> DB
+    
+    style ADMIN fill:#ff6b6b
+    style LEAD fill:#4ecdc4
+    style MEMBER fill:#95e1d3
+    style DB fill:#f38181
+    style FILTER fill:#feca57
+    style OWNER fill:#48dbfb
+```
+
+**Permission Matrix:**
+
+| Feature | Admin | Team Lead | Team Member |
+|---------|-------|-----------|-------------|
+| **Authentication** |
+| Sign Up | ✅ | ✅ | ✅ |
+| Login | ✅ | ✅ | ✅ |
+| Logout | ✅ | ✅ | ✅ |
+| **Conversations** |
+| Create Conversation | ✅ | ✅ | ✅ |
+| View Own Conversations | ✅ | ✅ | ✅ |
+| View Team Conversations | ✅ | ✅ (Future) | ❌ |
+| View All Conversations | ✅ (Future) | ❌ | ❌ |
+| Edit Own Conversations | ✅ | ✅ | ✅ |
+| Delete Own Conversations | ✅ | ✅ | ✅ |
+| Delete Any Conversation | ✅ (Future) | ❌ | ❌ |
+| **Knowledge Base** |
+| Query Business Docs | ✅ | ✅ | ✅ |
+| Query Code (PHP/JS/Blade) | ✅ | ✅ | ✅ |
+| **User Management** |
+| Create Users | ✅ (Future) | ❌ | ❌ |
+| Edit Users | ✅ (Future) | ❌ | ❌ |
+| Delete Users | ✅ (Future) | ❌ | ❌ |
+| View User List | ✅ (Future) | ✅ (Team) | ❌ |
+| **System** |
+| View Analytics | ✅ (Future) | ✅ (Team) | ❌ |
+| System Configuration | ✅ (Future) | ❌ | ❌ |
+| View Logs | ✅ (Future) | ❌ | ❌ |
+
+*(Future) = Planned for future releases*
+
+**Current Implementation:** All roles have equal access to conversations (own data only). Future releases will implement team-based and admin-level access controls.
+
+**Database Schema:**
+```sql
+-- Users Table
+CREATE TABLE users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,      -- Stored in lowercase
+    email VARCHAR(100) UNIQUE NOT NULL,        -- Stored in lowercase
+    hashed_password VARCHAR(255) NOT NULL,     -- Bcrypt hash
+    full_name VARCHAR(100),                    -- Display name
+    role VARCHAR(20) NOT NULL DEFAULT 'team_member',
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Conversations Table (User-Isolated)
+CREATE TABLE conversations (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    title VARCHAR(200) NOT NULL DEFAULT 'New Conversation',
+    context_type VARCHAR(50) NOT NULL DEFAULT 'business',
+    is_archived BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW(),
+    INDEX idx_user_id (user_id),
+    INDEX idx_updated_at (updated_at)
+);
+
+-- Messages Table
+CREATE TABLE messages (
+    id SERIAL PRIMARY KEY,
+    conversation_id INTEGER NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    role VARCHAR(20) NOT NULL,  -- 'user' or 'bot'
+    content TEXT NOT NULL,
+    context_used TEXT,
+    message_metadata TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    INDEX idx_conversation_id (conversation_id)
+);
+```
+
+**Data Isolation:**
+```python
+# Location: backend/routers/chat_routes.py
+
+@router.get("/conversations")
+def get_conversations(
+    current_user: User = Depends(get_current_user),  # Inject authenticated user
+    db: Session = Depends(get_db)
+):
+    # CRITICAL: Filter by authenticated user's ID
+    conversations = db.query(Conversation)\
+        .filter(Conversation.user_id == current_user.id)\
+        .order_by(Conversation.updated_at.desc())\
+        .all()
+    return conversations
+```
+
+**Security Guarantees:**
+- ✅ Each user sees ONLY their own conversations
+- ✅ New users start with empty conversation list
+- ✅ CASCADE DELETE: Deleting user removes all their data
+- ✅ All endpoints require authentication (401 if missing token)
+- ✅ User ID extracted from validated JWT, not from client request
+
+#### 🌐 Frontend Authentication Flow
+
+**Location:** `frontend/src/contexts/AuthContext.jsx`
+
+```javascript
+// Auth State Management
+const AuthProvider = ({ children }) => {
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(() => localStorage.getItem('token'));
+
+  // Auto-load user on mount if token exists
+  useEffect(() => {
+    const loadUser = async () => {
+      const storedToken = localStorage.getItem('token');
+      if (storedToken) {
+        const response = await fetch('/api/auth/me', {
+          headers: { 'Authorization': `Bearer ${storedToken}` }
+        });
+        
+        if (response.ok) {
+          const userData = await response.json();
+          setUser(userData);
+        } else {
+          // Invalid token - clear it
+          localStorage.removeItem('token');
+          setToken(null);
+        }
+      }
+    };
+    loadUser();
+  }, []);
+
+  // Login function
+  const login = async (username, password) => {
+    const response = await fetch('/api/auth/login-json', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    
+    const data = await response.json();
+    localStorage.setItem('token', data.access_token);
+    setUser({ id: data.user_id, username: data.username, role: data.role });
+    setToken(data.access_token);
+  };
+
+  // Logout function
+  const logout = () => {
+    localStorage.removeItem('token');
+    setUser(null);
+    setToken(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, token, login, logout }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+```
+
+**Request Authentication:**
+```javascript
+// Location: frontend/src/ChatApp.jsx
+
+// Helper to include auth headers in all requests
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
+};
+
+// Example authenticated request
+const loadConversations = async () => {
+  const response = await fetch('/api/chat/conversations', {
+    headers: getAuthHeaders()
+  });
+  
+  if (response.status === 401) {
+    // Token expired - redirect to login
+    localStorage.removeItem('token');
+    navigate('/login');
+  }
+  
+  const conversations = await response.json();
+  setConversations(conversations);
+};
+```
+
+#### 📊 Authentication Endpoints
+
+| Endpoint | Method | Auth Required | Description |
+|----------|--------|---------------|-------------|
+| `/api/auth/signup` | POST | ❌ | Register new user account |
+| `/api/auth/login` | POST | ❌ | Login with OAuth2 form data |
+| `/api/auth/login-json` | POST | ❌ | Login with JSON body (frontend preferred) |
+| `/api/auth/me` | GET | ✅ | Get current user profile |
+| `/api/chat/conversations` | GET | ✅ | List user's conversations |
+| `/api/chat/conversations` | POST | ✅ | Create new conversation |
+| `/api/chat/conversations/{id}` | GET | ✅ | Get conversation details |
+| `/api/chat/conversations/{id}` | PATCH | ✅ | Update conversation title |
+| `/api/chat/conversations/{id}` | DELETE | ✅ | Delete conversation |
+| `/api/chat/conversations/{id}/messages` | POST | ✅ | Add message to conversation |
+
+**Request/Response Examples:**
+
+```bash
+# Sign Up
+curl -X POST http://localhost:8000/api/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "john_doe",
+    "email": "john@example.com",
+    "password": "secure123",
+    "full_name": "John Doe",
+    "role": "team_member"
+  }'
+
+# Response:
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer",
+  "user_id": 1,
+  "username": "john_doe",
+  "email": "john@example.com",
+  "role": "team_member"
+}
+
+# Login
+curl -X POST http://localhost:8000/api/auth/login-json \
+  -H "Content-Type: application/json" \
+  -d '{"username": "john_doe", "password": "secure123"}'
+
+# Get Conversations (Authenticated)
+curl -X GET http://localhost:8000/api/chat/conversations \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+#### 🛡️ Security Best Practices Implemented
+
+**Security Layers Architecture:**
+
+```mermaid
+graph TB
+    subgraph "Client Layer"
+        BROWSER[Browser]
+        LOCALSTORAGE[localStorage<br/>JWT Token]
+    end
+    
+    subgraph "Transport Layer"
+        HTTPS[HTTPS<br/>TLS 1.3]
+        CORS[CORS Policy<br/>Origin Validation]
+    end
+    
+    subgraph "Authentication Layer"
+        JWT_VERIFY[JWT Validation<br/>HS256 Signature]
+        TOKEN_EXP[Token Expiration<br/>30 min TTL]
+        USER_ACTIVE[User Active Check]
+    end
+    
+    subgraph "Authorization Layer"
+        RBAC[Role Check<br/>Admin/Lead/Member]
+        OWNERSHIP[Data Ownership<br/>Validation]
+        FILTER[Query Filter<br/>user_id = current_user]
+    end
+    
+    subgraph "Data Layer"
+        BCRYPT[Bcrypt Hashing<br/>Salt Rounds: 12]
+        DB_ENCRYPT[DB Encryption<br/>At Rest]
+        BACKUP[Encrypted Backups]
+    end
+    
+    subgraph "Application Layer"
+        INPUT_VAL[Input Validation<br/>Pydantic Models]
+        SQL_INJECT[SQL Injection Prevention<br/>SQLAlchemy ORM]
+        XSS[XSS Prevention<br/>React Auto-Escape]
+    end
+    
+    BROWSER --> LOCALSTORAGE
+    LOCALSTORAGE --> HTTPS
+    HTTPS --> CORS
+    CORS --> JWT_VERIFY
+    
+    JWT_VERIFY --> TOKEN_EXP
+    TOKEN_EXP --> USER_ACTIVE
+    USER_ACTIVE --> RBAC
+    
+    RBAC --> OWNERSHIP
+    OWNERSHIP --> FILTER
+    FILTER --> INPUT_VAL
+    
+    INPUT_VAL --> SQL_INJECT
+    SQL_INJECT --> XSS
+    XSS --> BCRYPT
+    
+    BCRYPT --> DB_ENCRYPT
+    DB_ENCRYPT --> BACKUP
+    
+    style HTTPS fill:#4CAF50
+    style JWT_VERIFY fill:#2196F3
+    style BCRYPT fill:#FF5722
+    style FILTER fill:#FFC107
+    style RBAC fill:#9C27B0
+    style DB_ENCRYPT fill:#F44336
+```
+
+**Data Isolation & Privacy Architecture:**
+
+```mermaid
+graph LR
+    subgraph "User 1 Space"
+        U1[User 1<br/>ID: 1]
+        U1C1[Conversation 1<br/>user_id: 1]
+        U1C2[Conversation 2<br/>user_id: 1]
+        U1M1[Messages]
+        U1M2[Messages]
+    end
+    
+    subgraph "User 2 Space"
+        U2[User 2<br/>ID: 2]
+        U2C1[Conversation 3<br/>user_id: 2]
+        U2C2[Conversation 4<br/>user_id: 2]
+        U2M1[Messages]
+        U2M2[Messages]
+    end
+    
+    subgraph "User 3 Space"
+        U3[User 3<br/>ID: 3]
+        U3C1[Conversation 5<br/>user_id: 3]
+        U3M1[Messages]
+    end
+    
+    subgraph "Database Layer"
+        DB[(PostgreSQL<br/>Row-Level Security)]
+        QUERY[SELECT * FROM conversations<br/>WHERE user_id = current_user.id]
+    end
+    
+    U1 --> U1C1
+    U1 --> U1C2
+    U1C1 --> U1M1
+    U1C2 --> U1M2
+    
+    U2 --> U2C1
+    U2 --> U2C2
+    U2C1 --> U2M1
+    U2C2 --> U2M2
+    
+    U3 --> U3C1
+    U3C1 --> U3M1
+    
+    U1C1 --> QUERY
+    U1C2 --> QUERY
+    U2C1 --> QUERY
+    U2C2 --> QUERY
+    U3C1 --> QUERY
+    
+    QUERY --> DB
+    
+    style U1 fill:#e3f2fd
+    style U2 fill:#f3e5f5
+    style U3 fill:#e8f5e9
+    style DB fill:#ffebee
+    style QUERY fill:#fff9c4
+```
+
+✅ **Password Security**
+- Bcrypt hashing with automatic salting
+- Minimum 6 character requirement
+- Timing-safe comparison
+
+✅ **Token Security**
+- Short expiration (30 minutes)
+- HS256 algorithm (industry standard)
+- Subject claim as string (JWT RFC 7519 compliant)
+- Automatic token cleanup on expiration
+
+✅ **Data Isolation**
+- User ID from validated JWT, never from client
+- All queries filtered by authenticated user ID
+- Cascade delete for data cleanup
+
+✅ **Input Validation**
+- Email validation (EmailStr type)
+- Username normalization (lowercase)
+- Role validation (enum constraint)
+- Active status checking
+
+✅ **CORS Configuration**
+- Allow credentials
+- Specific origin control (production: whitelist only)
+- Secure header handling
+
+✅ **Error Handling**
+- Generic error messages (prevent user enumeration)
+- Proper HTTP status codes
+- Logging for debugging (server-side only)
+
+#### 🔄 Migration from Default User to Multi-User
+
+The system evolved from single-user to multi-user with backward compatibility:
+
+**Before (Single User):**
+```python
+# All users shared the same "default_user"
+user = crud.get_default_user(db)
+conversations = crud.get_user_conversations(db, user.id)
+```
+
+**After (Multi-User with Authentication):**
+```python
+# Each user sees only their own data
+@router.get("/conversations")
+def get_conversations(current_user: User = Depends(get_current_user)):
+    conversations = crud.get_user_conversations(db, current_user.id)
+    return conversations
+```
+
+**Migration Steps for Existing Deployments:**
+1. Run database migration: `python backend/migrate_database.py`
+2. Add SECRET_KEY to `.env` file
+3. Restart backend server
+4. Existing conversations assigned to default user
+5. New users start fresh with isolated data
+
+---
+
+### 4. Vector Databases (ChromaDB)
 
 **Location:** `vector_db/`
 

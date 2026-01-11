@@ -49,6 +49,7 @@ def init_db():
         
         # Create default user if not exists
         from models import User, UserRole
+        from auth import get_password_hash
         db = SessionLocal()
         try:
             default_user = db.query(User).filter(User.username == "default_user").first()
@@ -57,12 +58,13 @@ def init_db():
                     username="default_user",
                     full_name="Default User",
                     email="user@banking-assistant.local",
+                    hashed_password=get_password_hash("password123"),  # Default password
                     role=UserRole.TEAM_MEMBER,
                     is_active=True
                 )
                 db.add(default_user)
                 db.commit()
-                logger.info("Default user created")
+                logger.info("Default user created with password: password123")
         finally:
             db.close()
             
