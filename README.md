@@ -588,12 +588,12 @@ graph TB
     FILTER --> OWNER
     OWNER --> DB
     
-    style ADMIN fill:#ff6b6b
-    style LEAD fill:#4ecdc4
-    style MEMBER fill:#95e1d3
-    style DB fill:#f38181
-    style FILTER fill:#feca57
-    style OWNER fill:#48dbfb
+    style ADMIN fill:#ffcdd2,stroke:#c62828,stroke-width:3px,color:#000
+    style LEAD fill:#b2ebf2,stroke:#00838f,stroke-width:3px,color:#000
+    style MEMBER fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px,color:#000
+    style DB fill:#ffccbc,stroke:#d84315,stroke-width:3px,color:#000
+    style FILTER fill:#fff9c4,stroke:#f57f17,stroke-width:3px,color:#000
+    style OWNER fill:#b3e5fc,stroke:#0277bd,stroke-width:3px,color:#000
 ```
 
 **Permission Matrix:**
@@ -894,12 +894,12 @@ graph TB
     BCRYPT --> DB_ENCRYPT
     DB_ENCRYPT --> BACKUP
     
-    style HTTPS fill:#4CAF50
-    style JWT_VERIFY fill:#2196F3
-    style BCRYPT fill:#FF5722
-    style FILTER fill:#FFC107
-    style RBAC fill:#9C27B0
-    style DB_ENCRYPT fill:#F44336
+    style HTTPS fill:#c8e6c9,stroke:#2e7d32,stroke-width:3px,color:#000
+    style JWT_VERIFY fill:#bbdefb,stroke:#1565c0,stroke-width:3px,color:#000
+    style BCRYPT fill:#ffccbc,stroke:#d84315,stroke-width:3px,color:#000
+    style FILTER fill:#fff9c4,stroke:#f57f17,stroke-width:3px,color:#000
+    style RBAC fill:#e1bee7,stroke:#6a1b9a,stroke-width:3px,color:#000
+    style DB_ENCRYPT fill:#ffcdd2,stroke:#c62828,stroke-width:3px,color:#000
 ```
 
 **Data Isolation & Privacy Architecture:**
@@ -954,11 +954,11 @@ graph LR
     
     QUERY --> DB
     
-    style U1 fill:#e3f2fd
-    style U2 fill:#f3e5f5
-    style U3 fill:#e8f5e9
-    style DB fill:#ffebee
-    style QUERY fill:#fff9c4
+    style U1 fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,color:#000
+    style U2 fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style U3 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style DB fill:#ffebee,stroke:#c62828,stroke-width:2px,color:#000
+    style QUERY fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
 ```
 
 ✅ **Password Security**
