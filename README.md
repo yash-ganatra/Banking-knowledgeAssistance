@@ -170,19 +170,19 @@ graph TB
     EMB --> VDB3
     EMB --> VDB4
     
-    style UI fill:#e1f5ff
-    style CHAT fill:#e1f5ff
-    style API fill:#fff4e6
-    style CHATAPI fill:#fff4e6
-    style LLM fill:#f3e5f5
-    style VDB1 fill:#e8f5e9
-    style VDB2 fill:#e8f5e9
-    style VDB3 fill:#e8f5e9
-    style VDB4 fill:#e8f5e9
-    style PGDB fill:#ffe0b2
-    style USERS fill:#ffe0b2
-    style CONVS fill:#ffe0b2
-    style MSGS fill:#ffe0b2
+    style UI fill:#e1f5ff,stroke:#0277bd,stroke-width:2px,color:#000
+    style CHAT fill:#e1f5ff,stroke:#0277bd,stroke-width:2px,color:#000
+    style API fill:#fff4e6,stroke:#ef6c00,stroke-width:2px,color:#000
+    style CHATAPI fill:#fff4e6,stroke:#ef6c00,stroke-width:2px,color:#000
+    style LLM fill:#f3e5f5,stroke:#6a1b9a,stroke-width:2px,color:#000
+    style VDB1 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style VDB2 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style VDB3 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style VDB4 fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style PGDB fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
+    style USERS fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
+    style CONVS fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
+    style MSGS fill:#ffe0b2,stroke:#e65100,stroke-width:2px,color:#000
 ```
 
 ---
@@ -1054,10 +1054,11 @@ graph TB
     BGE --> VDB3
     BGE --> VDB4
     
-    style VDB1 fill:#c8e6c9
-    style VDB2 fill:#bbdefb
-    style VDB3 fill:#bbdefb
-    style VDB4 fill:#fff9c4
+    style VDB1 fill:#c8e6c9,stroke:#2e7d32,stroke-width:2px,color:#000
+    style VDB2 fill:#bbdefb,stroke:#1565c0,stroke-width:2px,color:#000
+    style VDB3 fill:#bbdefb,stroke:#1565c0,stroke-width:2px,color:#000
+    style VDB4 fill:#fff9c4,stroke:#f57f17,stroke-width:2px,color:#000
+    style BGE fill:#ffccbc,stroke:#d84315,stroke-width:2px,color:#000
 ```
 
 **Database Specifications:**
