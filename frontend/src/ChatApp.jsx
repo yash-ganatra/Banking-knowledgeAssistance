@@ -82,18 +82,18 @@ function ChatApp() {
       setLoadingConversations(false);
       return;
     }
-    
+
     try {
       setLoadingConversations(true);
       const headers = getAuthHeaders();
       console.log('Request headers:', headers);
-      
+
       const response = await fetch('http://localhost:8000/api/chat/conversations', {
         headers: headers
       });
-      
+
       console.log('Response status:', response.status);
-      
+
       if (response.ok) {
         const data = await response.json();
         setConversations(data);
@@ -300,7 +300,7 @@ function ChatApp() {
       <AnimatePresence>
         {!hasUserInteracted && (
           <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none">
-            <RotatingCube layoutId="cube-main" size={224} />
+            <RotatingCube layoutId="cube-main" size={180} />
           </div>
         )}
       </AnimatePresence>
@@ -316,7 +316,7 @@ function ChatApp() {
               className="h-full bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-r border-gray-200 dark:border-gray-800 shadow-xl flex flex-col"
             >
               <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-4">
                   <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white overflow-visible">
                     {hasUserInteracted ? (
                       <RotatingCube layoutId="cube-main" size={32} />

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { Lock, Mail, AlertCircle, Loader2, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { BackgroundEffects } from '../components/BackgroundEffects';
 import { RotatingCube } from '../components/RotatingCube';
 
 export function LoginPage({ onSwitchToSignup }) {
@@ -28,28 +27,43 @@ export function LoginPage({ onSwitchToSignup }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900">
-      <BackgroundEffects />
-      
-      {/* Floating 3D Cube */}
-      <div className="absolute top-20 right-20 opacity-20">
-        <RotatingCube size={150} />
+    <div className="flex min-h-screen">
+      {/* Left Panel - Solid Blue */}
+      <div className="hidden lg:flex w-1/2 bg-blue-600 items-center justify-center p-12 relative overflow-hidden">
+        <div className="text-center z-10 w-full max-w-lg">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+          >
+            <h1 className="text-5xl font-bold text-white mb-6">Welcome Back</h1>
+            <p className="text-blue-100 text-xl leading-relaxed">
+              Access your intelligent coding companion. Navigate complex banking architectures, understand legacy code, and accelerate development with AI-powered insights.
+            </p>
+          </motion.div>
+        </div>
+
+        {/* Subtle decorative circles in background */}
+        <div className="absolute top-0 -left-20 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob" />
+        <div className="absolute -bottom-20 right-0 w-80 h-80 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000" />
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 w-full max-w-md px-6"
-      >
-        <div className="bg-white/10 dark:bg-slate-800/50 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 p-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 mb-4">
-              <Shield className="w-8 h-8 text-white" />
+      {/* Right Panel - White with Cube and Form */}
+      <div className="w-full lg:w-1/2 bg-white flex flex-col items-center justify-center p-8 relative">
+        <div className="w-full max-w-md space-y-8">
+
+          {/* Cube Display */}
+          <div className="flex justify-center mb-8 h-48 relative">
+            <div className="scale-75 origin-center">
+              <RotatingCube size={180} textColor="text-blue-600" />
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">Welcome Back</h1>
-            <p className="text-gray-300">Sign in to your banking assistant</p>
+          </div>
+
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Sign in to Account</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Please enter your credentials to proceed
+            </p>
           </div>
 
           {/* Error Message */}
@@ -57,18 +71,17 @@ export function LoginPage({ onSwitchToSignup }) {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg flex items-start gap-3"
+              className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3"
             >
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-200">{error}</p>
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700">{error}</p>
             </motion.div>
           )}
 
           {/* Login Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Username Field */}
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-200 mb-2">
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-2">
                 Username
               </label>
               <div className="relative">
@@ -81,15 +94,14 @@ export function LoginPage({ onSwitchToSignup }) {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   required
-                  className="block w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="block w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="Enter your username"
                 />
               </div>
             </div>
 
-            {/* Password Field */}
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-200 mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
                 Password
               </label>
               <div className="relative">
@@ -102,17 +114,16 @@ export function LoginPage({ onSwitchToSignup }) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="block w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="block w-full pl-10 pr-3 py-3 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="Enter your password"
                 />
               </div>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium rounded-lg hover:from-blue-600 hover:to-cyan-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02]"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] shadow-md shadow-blue-200"
             >
               {loading ? (
                 <>
@@ -128,27 +139,21 @@ export function LoginPage({ onSwitchToSignup }) {
             </button>
           </form>
 
-          {/* Sign Up Link */}
-          <div className="mt-6 text-center">
-            <p className="text-gray-300">
+          <div className="text-center mt-6">
+            <p className="text-sm text-gray-600">
               Don't have an account?{' '}
               <button
                 onClick={onSwitchToSignup}
-                className="text-blue-400 hover:text-blue-300 font-medium transition-colors"
+                className="text-blue-600 hover:text-blue-700 font-semibold transition-colors"
               >
                 Sign up
               </button>
             </p>
           </div>
 
-          {/* Default User Note */}
-          <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-            <p className="text-xs text-blue-200 text-center">
-              <strong>Demo:</strong> Use <code className="bg-blue-500/20 px-1.5 py-0.5 rounded">default_user</code> / <code className="bg-blue-500/20 px-1.5 py-0.5 rounded">password123</code>
-            </p>
-          </div>
+
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

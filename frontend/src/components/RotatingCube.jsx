@@ -1,7 +1,7 @@
 import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
 import { useEffect } from "react";
 
-export function RotatingCube({ size = 288, layoutId, className }) {
+export function RotatingCube({ size = 288, layoutId, className, textColor = "text-white" }) {
     // Half size (translateZ) is size / 2
     const halfSize = `${size / 2}px`;
 
@@ -25,9 +25,15 @@ export function RotatingCube({ size = 288, layoutId, className }) {
 
     // Adjust font sizes based on cube size
     const isSmall = size < 100;
-    const fontSizeLg = isSmall ? "text-[0px]" : "text-4xl";
-    const fontSizeMd = isSmall ? "text-[0px]" : "text-2xl";
-    const fontSizeSm = isSmall ? "text-[0px]" : "text-xl";
+    const fontSizeLg = isSmall ? "text-[0px]" : "text-2xl";
+    const fontSizeMd = isSmall ? "text-[0px]" : "text-xl";
+    const fontSizeSm = isSmall ? "text-[0px]" : "text-lg";
+
+    // Dynamic classes based on text color context
+    // If text is not white (e.g. blue), we likely want a lighter face background
+    const faceBgClass = textColor === "text-white"
+        ? "bg-primary-500/30 backdrop-blur-sm border-white/20"
+        : "bg-blue-100/30 backdrop-blur-sm border-blue-500/20";
 
     return (
         <motion.div
@@ -37,7 +43,7 @@ export function RotatingCube({ size = 288, layoutId, className }) {
         >
             {/* Gradient glow/shadow behind the cube - only show when large */}
             {!isSmall && (
-                <div className="absolute w-96 h-96 bg-primary-500/20 rounded-full blur-3xl -z-10" />
+                <div className={`absolute w-96 h-96 rounded-full blur-3xl -z-10 ${textColor === "text-white" ? "bg-primary-500/20" : "bg-blue-500/10"}`} />
             )}
 
             <motion.div
@@ -66,37 +72,37 @@ export function RotatingCube({ size = 288, layoutId, className }) {
                     {/* Faces common classes for Glass Effect */}
 
                     {/* Front - "Customer" */}
-                    <div className={`absolute inset-0 bg-primary-500/30 backdrop-blur-sm border border-white/20 shadow-inner backface-hidden flex items-center justify-center text-white font-semibold ${fontSizeLg}`}
+                    <div className={`absolute inset-0 ${faceBgClass} shadow-inner backface-hidden flex items-center justify-center ${textColor} font-semibold ${fontSizeLg} border`}
                         style={{ transform: `translateZ(${halfSize})` }}>
                         Customer
                     </div>
 
                     {/* Back - "Communication" */}
-                    <div className={`absolute inset-0 bg-primary-500/30 backdrop-blur-sm border border-white/20 shadow-inner backface-hidden flex items-center justify-center text-white font-semibold ${fontSizeMd}`}
+                    <div className={`absolute inset-0 ${faceBgClass} shadow-inner backface-hidden flex items-center justify-center ${textColor} font-semibold ${fontSizeMd} border`}
                         style={{ transform: `rotateY(180deg) translateZ(${halfSize})` }}>
                         Communication
                     </div>
 
                     {/* Right - "Compliance" */}
-                    <div className={`absolute inset-0 bg-primary-500/30 backdrop-blur-sm border border-white/20 shadow-inner backface-hidden flex items-center justify-center text-white font-semibold ${fontSizeLg}`}
+                    <div className={`absolute inset-0 ${faceBgClass} shadow-inner backface-hidden flex items-center justify-center ${textColor} font-semibold ${fontSizeLg} border`}
                         style={{ transform: `rotateY(90deg) translateZ(${halfSize})` }}>
                         Compliance
                     </div>
 
                     {/* Left - "Confidentiality" */}
-                    <div className={`absolute inset-0 bg-primary-500/30 backdrop-blur-sm border border-white/20 shadow-inner backface-hidden flex items-center justify-center text-white font-semibold ${fontSizeSm}`}
+                    <div className={`absolute inset-0 ${faceBgClass} shadow-inner backface-hidden flex items-center justify-center ${textColor} font-semibold ${fontSizeSm} border`}
                         style={{ transform: `rotateY(-90deg) translateZ(${halfSize})` }}>
                         Confidentiality
                     </div>
 
                     {/* Top - "Credibility" */}
-                    <div className={`absolute inset-0 bg-primary-500/30 backdrop-blur-sm border border-white/20 shadow-inner backface-hidden flex items-center justify-center text-white font-semibold ${fontSizeLg}`}
+                    <div className={`absolute inset-0 ${faceBgClass} shadow-inner backface-hidden flex items-center justify-center ${textColor} font-semibold ${fontSizeLg} border`}
                         style={{ transform: `rotateX(90deg) translateZ(${halfSize})` }}>
                         Credibility
                     </div>
 
                     {/* Bottom - "Convenience" */}
-                    <div className={`absolute inset-0 bg-primary-500/30 backdrop-blur-sm border border-white/20 shadow-inner backface-hidden flex items-center justify-center text-white font-semibold ${fontSizeLg}`}
+                    <div className={`absolute inset-0 ${faceBgClass} shadow-inner backface-hidden flex items-center justify-center ${textColor} font-semibold ${fontSizeLg} border`}
                         style={{ transform: `rotateX(-90deg) translateZ(${halfSize})` }}>
                         Convenience
                     </div>

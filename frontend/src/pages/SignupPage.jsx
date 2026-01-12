@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Lock, Mail, User, AlertCircle, Loader2, Shield, UserPlus } from 'lucide-react';
+import { Lock, Mail, User, AlertCircle, Loader2, UserPlus, Shield } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { BackgroundEffects } from '../components/BackgroundEffects';
 import { RotatingCube } from '../components/RotatingCube';
 
 export function SignupPage({ onSwitchToLogin }) {
@@ -52,28 +51,43 @@ export function SignupPage({ onSwitchToLogin }) {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-      <BackgroundEffects />
-      
-      {/* Floating 3D Cube */}
-      <div className="absolute top-20 left-20 opacity-20">
-        <RotatingCube size={150} />
+    <div className="flex min-h-screen">
+      {/* Left Panel - Solid Blue */}
+      <div className="hidden lg:flex w-1/2 bg-blue-600 items-center justify-center p-12 relative overflow-hidden">
+        <div className="text-center z-10 w-full max-w-lg">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+          >
+            <h1 className="text-5xl font-bold text-white mb-6">Join Us</h1>
+            <p className="text-blue-100 text-xl leading-relaxed">
+              Create your account to unlock powerful code insights. collaborate with your team, and leverage AI for smarter development decisions.
+            </p>
+          </motion.div>
+        </div>
+
+        {/* Subtle decorative circles in background */}
+        <div className="absolute top-0 -left-20 w-80 h-80 bg-blue-500 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob" />
+        <div className="absolute -bottom-20 right-0 w-80 h-80 bg-blue-400 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000" />
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="relative z-10 w-full max-w-md px-6 py-8"
-      >
-        <div className="bg-white/10 dark:bg-slate-800/50 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/20 p-8">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 mb-4">
-              <UserPlus className="w-8 h-8 text-white" />
+      {/* Right Panel - White with Cube and Form */}
+      <div className="w-full lg:w-1/2 bg-white flex flex-col items-center justify-center p-8 relative">
+        <div className="w-full max-w-md space-y-6">
+
+          {/* Cube Display - Smaller on Signup slightly to fit more fields */}
+          <div className="flex justify-center mb-16 h-32 relative">
+            <div className="scale-[0.6] origin-center">
+              <RotatingCube size={180} textColor="text-blue-600" />
             </div>
-            <h1 className="text-3xl font-bold text-white mb-2">Create Account</h1>
-            <p className="text-gray-300">Join the banking assistant platform</p>
+          </div>
+
+          <div className="text-center">
+            <h2 className="text-3xl font-bold text-gray-900 tracking-tight">Create Account</h2>
+            <p className="mt-2 text-sm text-gray-600">
+              Join the future of intelligent banking
+            </p>
           </div>
 
           {/* Error Message */}
@@ -81,18 +95,17 @@ export function SignupPage({ onSwitchToLogin }) {
             <motion.div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
-              className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg flex items-start gap-3"
+              className="p-4 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3"
             >
-              <AlertCircle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-red-200">{error}</p>
+              <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-red-700">{error}</p>
             </motion.div>
           )}
 
           {/* Signup Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Username Field */}
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-200 mb-2">
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
                 Username
               </label>
               <div className="relative">
@@ -108,15 +121,14 @@ export function SignupPage({ onSwitchToLogin }) {
                   required
                   minLength={3}
                   maxLength={50}
-                  className="block w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                  className="block w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="Choose a username"
                 />
               </div>
             </div>
 
-            {/* Email Field */}
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-200 mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                 Email
               </label>
               <div className="relative">
@@ -130,60 +142,59 @@ export function SignupPage({ onSwitchToLogin }) {
                   value={formData.email}
                   onChange={handleChange}
                   required
-                  className="block w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
+                  className="block w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   placeholder="your.email@example.com"
                 />
               </div>
             </div>
 
-            {/* Password Field */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-200 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
+                  Password
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="password"
+                    name="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                    minLength={6}
+                    className="block w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                    placeholder="Min 6 chars"
+                  />
                 </div>
-                <input
-                  id="password"
-                  name="password"
-                  type="password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  required
-                  minLength={6}
-                  className="block w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
-                  placeholder="Min. 6 characters"
-                />
+              </div>
+
+              <div>
+                <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 mb-1">
+                  Confirm
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-gray-400" />
+                  </div>
+                  <input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type="password"
+                    value={formData.confirmPassword}
+                    onChange={handleChange}
+                    required
+                    className="block w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                    placeholder="Confirm"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Confirm Password Field */}
             <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-200 mb-2">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <Lock className="h-5 w-5 text-gray-400" />
-                </div>
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  required
-                  className="block w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"
-                  placeholder="Confirm your password"
-                />
-              </div>
-            </div>
-
-            {/* Role Selection */}
-            <div>
-              <label htmlFor="role" className="block text-sm font-medium text-gray-200 mb-2">
+              <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-1">
                 Role
               </label>
               <div className="relative">
@@ -195,26 +206,24 @@ export function SignupPage({ onSwitchToLogin }) {
                   name="role"
                   value={formData.role}
                   onChange={handleChange}
-                  className="block w-full pl-10 pr-3 py-3 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition appearance-none cursor-pointer"
+                  className="block w-full pl-10 pr-3 py-2.5 bg-gray-50 border border-gray-300 rounded-lg text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition appearance-none cursor-pointer"
                 >
-                  <option value="team_member" className="bg-slate-800">Team Member</option>
-                  <option value="team_lead" className="bg-slate-800">Team Lead</option>
-                  <option value="admin" className="bg-slate-800">Admin</option>
+                  <option value="team_member">Team Member</option>
+                  <option value="team_lead">Team Lead</option>
+                  <option value="admin">Admin</option>
                 </select>
               </div>
-              <p className="mt-1 text-xs text-gray-400">Select your role in the organization</p>
             </div>
 
-            {/* Submit Button */}
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white font-medium rounded-lg hover:from-purple-600 hover:to-pink-600 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02]"
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-[1.02] shadow-md shadow-blue-200 mt-2"
             >
               {loading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Creating account...</span>
+                  <span>Creating Account...</span>
                 </>
               ) : (
                 <>
@@ -225,20 +234,19 @@ export function SignupPage({ onSwitchToLogin }) {
             </button>
           </form>
 
-          {/* Login Link */}
-          <div className="mt-6 text-center">
-            <p className="text-gray-300">
+          <div className="text-center mt-6">
+            <p className="text-sm text-gray-600">
               Already have an account?{' '}
               <button
                 onClick={onSwitchToLogin}
-                className="text-purple-400 hover:text-purple-300 font-medium transition-colors"
+                className="text-blue-600 hover:text-blue-700 font-semibold transition-colors"
               >
                 Sign in
               </button>
             </p>
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }
