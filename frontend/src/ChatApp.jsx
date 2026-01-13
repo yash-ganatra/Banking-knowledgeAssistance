@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { RotatingCube } from './components/RotatingCube';
 import { BackgroundEffects } from './components/BackgroundEffects';
 import { MermaidDiagram } from './components/MermaidDiagram';
+import CodeReview from './components/CodeReview';
 import { useAuth } from './contexts/AuthContext';
 
 import { cn } from './lib/utils';
@@ -12,6 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 function ChatApp() {
   const { user, logout } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [activeView, setActiveView] = useState('chat'); // 'chat' or 'code-review'
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('theme');
@@ -298,7 +300,7 @@ function ChatApp() {
       {/* Background Cube and Effects */}
       <BackgroundEffects isDarkMode={isDarkMode} />
       <AnimatePresence>
-        {!hasUserInteracted && (
+        {!hasUserInteracted && activeView !== 'code-review' && (
           <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none">
             <RotatingCube layoutId="cube-main" size={180} />
           </div>
@@ -333,77 +335,103 @@ function ChatApp() {
 
               <div className="flex-1 overflow-y-auto p-4 space-y-6">
 
-                {/* Context Selector */}
-                <div className="space-y-2">
-                  <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Context Source</h3>
-                  <div className="space-y-1">
-                    {contexts.map((ctx) => (
-                      <div
-                        key={ctx.id}
-                        onClick={() => setSelectedContext(ctx.id)}
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
-                          selectedContext === ctx.id
-                            ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800"
-                            : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                        )}
-                      >
-                        <span className={selectedContext === ctx.id ? "text-primary-600" : "text-gray-500"}>
-                          {ctx.icon}
-                        </span>
-                        <span>{ctx.label}</span>
-                        {selectedContext === ctx.id && (
-                          <motion.div layoutId="active-dot" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
-                        )}
-                      </div>
-                    ))}
+                {/* Context Selector - only show in chat view */}
+                {activeView === 'chat' && (
+                  <div className="space-y-2">
+                    <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Context Source</h3>
+                    <div className="space-y-1">
+                      {contexts.map((ctx) => (
+                        <div
+                          key={ctx.id}
+                          onClick={() => setSelectedContext(ctx.id)}
+                          className={cn(
+                            "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
+                            selectedContext === ctx.id
+                              ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800"
+                              : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                          )}
+                        >
+                          <span className={selectedContext === ctx.id ? "text-primary-600" : "text-gray-500"}>
+                            {ctx.icon}
+                          </span>
+                          <span>{ctx.label}</span>
+                          {selectedContext === ctx.id && (
+                            <motion.div layoutId="active-dot" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 <div className="space-y-1">
                   <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Capabilities</h3>
-                  <div className="group flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-300 cursor-pointer transition-colors">
+                  <div 
+                    onClick={() => setActiveView('code-review')}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
+                      activeView === 'code-review'
+                        ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800"
+                        : "text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-300"
+                    )}
+                  >
                     <Code size={18} />
-                    <span>Code Analysis</span>
+                    <span>Code Review</span>
+                    {activeView === 'code-review' && (
+                      <motion.div layoutId="active-capability" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
+                    )}
                   </div>
-                  <div className="group flex items-center gap-3 px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-300 cursor-pointer transition-colors">
-                    <Shield size={18} />
-                    <span>Security Audit</span>
+                  <div 
+                    onClick={() => setActiveView('chat')}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
+                      activeView === 'chat'
+                        ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800"
+                        : "text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-300"
+                    )}
+                  >
+                    <MessageSquare size={18} />
+                    <span>Knowledge Chat</span>
+                    {activeView === 'chat' && (
+                      <motion.div layoutId="active-capability" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
+                    )}
                   </div>
                 </div>
 
-                <div className="space-y-1 pt-4 border-t border-gray-100 dark:border-gray-800">
-                  <div className="flex items-center justify-between px-2 mb-2">
-                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Conversations</h3>
-                    <button
-                      onClick={createNewConversation}
-                      className="p-1 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition-colors"
-                      title="New Conversation"
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-
-                  {loadingConversations ? (
-                    <div className="px-3 py-2 text-sm text-gray-400">Loading...</div>
-                  ) : conversations.length === 0 ? (
-                    <div className="px-3 py-2 text-xs text-gray-400">
-                      No conversations yet. Start chatting!
+                {/* Conversations - only show in chat view */}
+                {activeView === 'chat' && (
+                  <div className="space-y-1 pt-4 border-t border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center justify-between px-2 mb-2">
+                      <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Conversations</h3>
+                      <button
+                        onClick={createNewConversation}
+                        className="p-1 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition-colors"
+                        title="New Conversation"
+                      >
+                        <Plus size={16} />
+                      </button>
                     </div>
-                  ) : (
-                    <div className="space-y-1 max-h-64 overflow-y-auto">
-                      {conversations.slice(0, 10).map((conv) => (
-                        <div
-                          key={conv.id}
-                          onClick={() => loadConversation(conv.id)}
-                          className={cn(
-                            "group flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors relative",
-                            currentConversationId === conv.id
-                              ? "bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300"
-                              : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
-                          )}
-                          title={conv.title} // Show full title on hover
-                        >
+
+                    {loadingConversations ? (
+                      <div className="px-3 py-2 text-sm text-gray-400">Loading...</div>
+                    ) : conversations.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-gray-400">
+                        No conversations yet. Start chatting!
+                      </div>
+                    ) : (
+                      <div className="space-y-1 max-h-64 overflow-y-auto">
+                        {conversations.slice(0, 10).map((conv) => (
+                          <div
+                            key={conv.id}
+                            onClick={() => loadConversation(conv.id)}
+                            className={cn(
+                              "group flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors relative",
+                              currentConversationId === conv.id
+                                ? "bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300"
+                                : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
+                            )}
+                            title={conv.title} // Show full title on hover
+                          >
                           <MessageSquare size={14} className="shrink-0" />
                           <div className="flex-1 min-w-0">
                             <div className="truncate font-medium">{conv.title}</div>
@@ -423,7 +451,8 @@ function ChatApp() {
                       ))}
                     </div>
                   )}
-                </div>
+                  </div>
+                )}
               </div>
 
               <div className="p-4 border-t border-gray-100 dark:border-gray-800 space-y-4">
@@ -464,10 +493,17 @@ function ChatApp() {
                   <PanelLeft size={20} />
                 </button>
               )}
-              <h1 className="font-semibold text-gray-800 dark:text-white">Banking Assistant</h1>
+              <h1 className="font-semibold text-gray-800 dark:text-white">
+                {activeView === 'code-review' ? 'Code Review Assistant' : 'Banking Assistant'}
+              </h1>
             </div>
           </header>
 
+          {/* Conditional content based on active view */}
+          {activeView === 'code-review' ? (
+            <CodeReview isDarkMode={isDarkMode} />
+          ) : (
+            <>
           <div className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-6">
             {messages.map((message) => (
               <motion.div
@@ -593,6 +629,8 @@ function ChatApp() {
               </div>
             </div>
           </div>
+            </>
+          )}
         </main>
       </div>
     </div>

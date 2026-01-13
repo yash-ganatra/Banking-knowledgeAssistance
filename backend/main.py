@@ -202,6 +202,10 @@ def startup_event():
     from routers.chat_routes import router as chat_router
     app.include_router(chat_router)
     
+    # Include code review routes
+    from routers.code_review_routes import router as code_review_router
+    app.include_router(code_review_router)
+    
     # Initialize Business Engine
     try:
         business_engine = BusinessQueryEngine()
