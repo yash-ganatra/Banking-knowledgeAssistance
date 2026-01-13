@@ -84,6 +84,15 @@ The **Banking Knowledge Assistant** is a sophisticated Retrieval-Augmented Gener
 - Semantic boundary preservation
 - Overlap for context continuity
 
+✅ **AI-Powered Code Review** 🆕
+- Real-time code analysis for PHP, JavaScript, and SQL
+- Guideline-based review using established coding standards
+- Syntax error detection and validation
+- Junior-developer friendly feedback with simple language
+- Severity-based issue categorization (Syntax, Critical, Warning, Info)
+- One-line actionable fix suggestions
+- Context-aware recommendations
+
 ---
 
 ## 🏗️ High-Level Architecture
@@ -1851,7 +1860,251 @@ http://localhost:8000
 
 ---
 
-## 💬 Chat History API Endpoints
+## � AI-Powered Code Review System
+
+### Overview
+
+The Code Review feature provides real-time, AI-powered analysis of PHP, JavaScript, and SQL code against established coding guidelines. Designed for junior developers, it offers concise, actionable feedback with syntax validation and best practice recommendations.
+
+### Architecture
+
+```mermaid
+graph TB
+    subgraph "Frontend - React Component"
+        UI[CodeReview Component<br/>CodeReview.jsx]
+        INPUT[Code Input Textarea<br/>Auto-resize, Syntax Detection]
+        DISPLAY[Results Display<br/>Markdown + Severity Icons]
+    end
+    
+    subgraph "Backend - FastAPI Router"
+        ROUTER[Code Review Router<br/>/api/code-review]
+        AUTH[JWT Authentication<br/>get_current_user]
+        LOADER[Guidelines Loader<br/>Load MD File]
+        PROMPT[Prompt Builder<br/>Context + Guidelines]
+    end
+    
+    subgraph "AI Processing"
+        GROQ[Groq AI API<br/>Llama 3.3 70B]
+        PARSE[Response Parser<br/>Extract Issues & Severity]
+    end
+    
+    subgraph "Coding Guidelines"
+        GUIDE[developer_coding_guidelines_<br/>php_java_script_database.md]
+        RULES[• Naming Conventions<br/>• Input Validation<br/>• Error Handling<br/>• Security Best Practices<br/>• Database Types]
+    end
+    
+    UI --> INPUT
+    INPUT -->|User Pastes Code| ROUTER
+    ROUTER --> AUTH
+    AUTH -->|Validate Token| LOADER
+    LOADER --> GUIDE
+    GUIDE --> PROMPT
+    PROMPT -->|Enhanced Prompt| GROQ
+    GROQ -->|AI Review| PARSE
+    PARSE -->|Structured Response| DISPLAY
+    DISPLAY --> UI
+    
+    style UI fill:#e3f2fd
+    style GROQ fill:#fff9c4
+    style GUIDE fill:#c8e6c9
+    style DISPLAY fill:#f3e5f5
+```
+
+### Technical Implementation
+
+#### 1. Frontend Component
+**File:** `frontend/src/components/CodeReview.jsx`
+
+**Key Features:**
+- Auto-expanding textarea with syntax highlighting
+- Language detection (PHP, JavaScript, SQL)
+- Copy/Clear code functionality
+- Markdown rendering for AI responses
+- Severity-based issue display with icons
+- Dark mode support
+
+```jsx
+// Language Detection
+const detectLanguage = (code) => {
+  if (code.includes('<?php') || code.includes('$')) return 'php';
+  if (code.includes('const') || code.includes('=>')) return 'javascript';
+  if (code.includes('SELECT') || code.includes('CREATE TABLE')) return 'sql';
+  return 'unknown';
+};
+
+// API Call
+const response = await fetch('http://localhost:8000/api/code-review', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${localStorage.getItem('token')}`
+  },
+  body: JSON.stringify({ code: codeInput, language: detectedLanguage })
+});
+```
+
+#### 2. Backend Router
+**File:** `backend/routers/code_review_routes.py`
+
+**Request Model:**
+```python
+class CodeReviewRequest(BaseModel):
+    code: str
+    language: Optional[str] = "unknown"
+```
+
+**Response Model:**
+```python
+class CodeReviewResponse(BaseModel):
+    success: bool
+    review: str                        # Full markdown review
+    issues: Optional[List[CodeIssue]]  # Parsed issues (optional)
+    score: Optional[int]               # Quality score (optional)
+    summary: Optional[str]             # Brief summary (optional)
+```
+
+#### 3. AI Prompt Engineering
+
+**Optimized for Junior Developers:**
+```python
+def create_code_review_prompt(code: str, language: str, guidelines: str):
+    return f"""You are an expert code reviewer specializing in {language}.
+    You provide clear, concise feedback for junior developers using simple language.
+    
+    Review the code and provide:
+    1. Syntax Check - Detect syntax errors first
+    2. Quick Summary (1-2 sentences)
+    3. Top 3-5 Issues by severity:
+       - 🔴 SYNTAX: Syntax errors
+       - 🔴 CRITICAL: Security holes
+       - ⚠️ WARNING: Bad practices
+       - ℹ️ INFO: Improvements
+    4. One-line fix for each issue
+    
+    Keep it short, actionable, and beginner-friendly."""
+```
+
+#### 4. Guidelines Integration
+
+**Guidelines File:** `developer_coding_guidelines_php_java_script_database.md`
+
+**Covers:**
+- Variable naming conventions (camelCase, snake_case)
+- Function naming patterns
+- API best practices (validation, error handling)
+- Database data type selection
+- Security practices (SQL injection, XSS prevention)
+- Code hygiene (function length, comments)
+
+**Loading Strategy:**
+```python
+def load_coding_guidelines():
+    guidelines_path = os.path.join(
+        project_root,
+        "developer_coding_guidelines_php_java_script_database.md"
+    )
+    with open(guidelines_path, 'r') as f:
+        return f.read()
+```
+
+### API Specification
+
+#### Endpoint
+```
+POST /api/code-review
+```
+
+#### Authentication
+- Requires JWT Bearer token
+- User must be authenticated
+
+#### Request Example
+```json
+{
+  "code": "function getUserData($id) {\n  $sql = \"SELECT * FROM users WHERE id = $id\";\n  return mysqli_query($conn, $sql);\n}",
+  "language": "php"
+}
+```
+
+#### Response Example
+```json
+{
+  "success": true,
+  "review": "**Summary:** Code has critical SQL injection vulnerability and missing error handling.\n\n**Issues:**\n- 🔴 CRITICAL: SQL Injection vulnerability → Fix: Use prepared statements with placeholders\n- ⚠️ WARNING: No error handling → Fix: Add try-catch block\n- ℹ️ INFO: Function name should use camelCase → Fix: Rename to getUserData"
+}
+```
+
+### Review Output Format
+
+**Concise Structure:**
+```
+**Summary:** [1-2 sentence overview]
+
+**Issues:**
+- 🔴 SYNTAX: [Error] → Fix: [Solution]
+- 🔴 CRITICAL: [Security issue] → Fix: [Solution]
+- ⚠️ WARNING: [Bad practice] → Fix: [Solution]
+- ℹ️ INFO: [Improvement] → Fix: [Solution]
+```
+
+### Integration Points
+
+1. **Sidebar Navigation:**
+   - "Code Review" option in Capabilities section
+   - Switches view from chat to code review
+   - Independent from conversation history
+
+2. **View Switching:**
+   ```jsx
+   const [activeView, setActiveView] = useState('chat'); // or 'code-review'
+   ```
+
+3. **Authentication Flow:**
+   - Same JWT authentication as chat
+   - Token stored in localStorage
+   - Automatic token validation
+
+### Performance Optimization
+
+- **Temperature:** 0.3 (focused, consistent feedback)
+- **Max Tokens:** 2000 (sufficient for concise reviews)
+- **Model:** Llama 3.3 70B Versatile (balanced speed/quality)
+- **Caching:** Guidelines loaded once at startup
+
+### Usage Example
+
+**Input Code:**
+```php
+<?php
+$user_id = $_GET['id'];
+$query = "DELETE FROM users WHERE id = $user_id";
+mysqli_query($conn, $query);
+echo "User deleted";
+```
+
+**Output:**
+```
+**Summary:** Critical security vulnerabilities detected. Code will execute but is unsafe.
+
+**Issues:**
+- 🔴 CRITICAL: SQL Injection vulnerability → Fix: Use prepared statements: $stmt = $conn->prepare("DELETE FROM users WHERE id = ?")
+- 🔴 CRITICAL: No input validation → Fix: Add isset() and is_numeric() checks
+- ⚠️ WARNING: Using GET for destructive operation → Fix: Use POST method instead
+- ⚠️ WARNING: No error handling → Fix: Wrap in try-catch block
+- ℹ️ INFO: Variable uses snake_case → Fix: Use camelCase: $userId
+```
+
+### Security Considerations
+
+- Code is not persisted or logged
+- All requests require authentication
+- API key kept server-side
+- Input sanitization on backend
+- Rate limiting can be added per user
+
+---
+
+## �💬 Chat History API Endpoints
 
 ### Base URL
 ```
