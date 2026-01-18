@@ -11,7 +11,17 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const loadUser = async () => {
       const storedToken = localStorage.getItem('token');
-      if (storedToken && !user) {
+      if (storedToken) {
+        // Validate the token format first
+        if (!storedToken || storedToken === 'undefined' || storedToken === 'null') {
+          console.log('Invalid token format, clearing...');
+          localStorage.removeItem('token');
+          setToken(null);
+          setUser(null);
+          setLoading(false);
+          return;
+        }
+
         try {
           const response = await fetch('http://localhost:8000/api/auth/me', {
             headers: {

@@ -71,10 +71,22 @@ def decode_access_token(token: str) -> Optional[dict]:
     Returns:
         Decoded token payload or None if invalid
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
     try:
+        # Validate token is not empty or malformed
+        if not token or token in ['undefined', 'null']:
+            logger.error(f"Invalid token format: {token}")
+            return None
+            
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return payload
-    except JWTError:
+    except JWTError as e:
+        logger.error(f"JWT decode error: {str(e)}")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error decoding token: {str(e)}")
         return None
 
 

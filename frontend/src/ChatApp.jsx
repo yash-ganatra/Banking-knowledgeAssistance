@@ -11,7 +11,7 @@ import { cn } from './lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 function ChatApp() {
-  const { user, logout } = useAuth();
+  const { user, logout, loading: authLoading } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeView, setActiveView] = useState('chat'); // 'chat' or 'code-review'
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -25,11 +25,17 @@ function ChatApp() {
 
   // Helper function to get auth headers
   const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
+    const token = user ? localStorage.getItem('token') : null;
+    if (!token) {
+      console.warn('No authentication token available');
+      return {
+        'Content-Type': 'application/json'
+      };
+    }
     console.log('Token from localStorage:', token ? `${token.substring(0, 20)}...` : 'null');
     return {
       'Content-Type': 'application/json',
-      ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+      'Authorization': `Bearer ${token}`
     };
   };
 
@@ -69,18 +75,18 @@ function ChatApp() {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  // Load conversations on mount (only if user is authenticated)
+  // Load conversations on mount (only if user is authenticated and auth is not loading)
   useEffect(() => {
-    if (user) {
+    if (user && !authLoading) {
       loadConversations();
     }
-  }, [user]);
+  }, [user, authLoading]);
 
   // Load conversations from API
   const loadConversations = async () => {
     const token = localStorage.getItem('token');
-    if (!token) {
-      console.log('No token found, skipping conversation load');
+    if (!token || !user) {
+      console.log('No token or user found, skipping conversation load');
       setLoadingConversations(false);
       return;
     }
@@ -96,13 +102,16 @@ function ChatApp() {
 
       console.log('Response status:', response.status);
 
+      if (response.status === 401) {
+        console.error('Authentication failed - token may be expired');
+        logout();
+        setLoadingConversations(false);
+        return;
+      }
+
       if (response.ok) {
         const data = await response.json();
         setConversations(data);
-      } else if (response.status === 401) {
-        const errorData = await response.json().catch(() => ({}));
-        console.error('Authentication failed - invalid or expired token', errorData);
-        // Optionally clear invalid token and redirect to login
       }
     } catch (error) {
       console.error('Error loading conversations:', error);
@@ -126,10 +135,22 @@ function ChatApp() {
 
   // Load a specific conversation
   const loadConversation = async (conversationId) => {
+    if (!user) {
+      console.warn('Cannot load conversation: user not authenticated');
+      return;
+    }
+    
     try {
       const response = await fetch(`http://localhost:8000/api/chat/conversations/${conversationId}`, {
         headers: getAuthHeaders()
       });
+      
+      if (response.status === 401) {
+        console.error('Authentication failed when loading conversation');
+        logout();
+        return;
+      }
+      
       if (response.ok) {
         const data = await response.json();
         setCurrentConversationId(conversationId);
@@ -412,7 +433,7 @@ function ChatApp() {
                       </button>
                     </div>
 
-                    {loadingConversations ? (
+                    {loadingConversations || authLoading ? (
                       <div className="px-3 py-2 text-sm text-gray-400">Loading...</div>
                     ) : conversations.length === 0 ? (
                       <div className="px-3 py-2 text-xs text-gray-400">
@@ -423,9 +444,10 @@ function ChatApp() {
                         {conversations.slice(0, 10).map((conv) => (
                           <div
                             key={conv.id}
-                            onClick={() => loadConversation(conv.id)}
+                            onClick={() => !authLoading && loadConversation(conv.id)}
                             className={cn(
-                              "group flex items-center gap-2 px-3 py-2 text-sm rounded-lg cursor-pointer transition-colors relative",
+                              "group flex items-center gap-2 px-3 py-2 text-sm rounded-lg transition-colors relative",
+                              authLoading ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
                               currentConversationId === conv.id
                                 ? "bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300"
                                 : "text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-800"
