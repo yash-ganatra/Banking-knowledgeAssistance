@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from groq import Groq
 
 from utils.blade_description_engine import BladeDescriptionEngine
+from utils.groq_rate_limiter import GroqRateLimiter
 
 # Load environment variables
 load_dotenv()
@@ -37,7 +38,8 @@ class BladeInferenceSystem:
     def __init__(
         self,
         groq_api_key: str = None,
-        db_path: str = None
+        db_path: str = None,
+        rate_limiter: GroqRateLimiter = None
     ):
         """
         Initialize inference system
@@ -45,6 +47,7 @@ class BladeInferenceSystem:
         Args:
             groq_api_key: Groq API key
             db_path: Path to ChromaDB
+            rate_limiter: Optional rate limiter instance
         """
         # Initialize engine
         print("🚀 Initializing Blade Inference System...")
@@ -59,6 +62,15 @@ class BladeInferenceSystem:
             api_key = "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"
         
         self.groq_client = Groq(api_key=api_key)
+        
+        # Initialize rate limiter
+        self.rate_limiter = rate_limiter or GroqRateLimiter(
+            max_retries=3,
+            base_delay=2.0,
+            daily_token_limit=100000,
+            enable_cache=True,
+            cache_ttl=1800
+        )
         
         print("✅ System initialized!")
         print()
@@ -199,8 +211,18 @@ RETRIEVED CONTEXT:
 Please answer the user's query based on the above context."""
         
         try:
-            # Call Groq API
-            chat_completion = self.groq_client.chat.completions.create(
+            # Call Groq API with retry logic
+            @self.rate_limiter.with_retry
+            def _make_completion(client, messages, model, temperature, max_tokens):
+                return client.chat.completions.create(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+            
+            chat_completion = _make_completion(
+                client=self.groq_client,
                 messages=[
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
@@ -213,6 +235,8 @@ Please answer the user's query based on the above context."""
             return chat_completion.choices[0].message.content
             
         except Exception as e:
+            if "rate_limit" in str(e).lower():
+                return f"⚠️ Rate limit reached. Please try again later. {str(e)}"
             return f"⚠️ LLM Error: {e}"
     
     def display_metrics(

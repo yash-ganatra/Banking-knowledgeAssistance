@@ -1,9 +1,9 @@
-
 import os
 import sys
 import json
 import logging
 from typing import List, Optional, Dict, Any
+from datetime import datetime
 from fastapi import FastAPI, HTTPException, Body, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -28,6 +28,17 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import BladeDescriptionEngine
 from utils.blade_description_engine import BladeDescriptionEngine
+
+# Import Query Router components
+from query_router import (
+    IntentClassifier,
+    QueryRouter,
+    UnifiedQueryEngine,
+    KnowledgeSource
+)
+
+# Import Rate Limiter
+from utils.groq_rate_limiter import GroqRateLimiter
 
 # Import database modules
 import database
@@ -63,8 +74,26 @@ class QueryRequest(BaseModel):
     rerank: bool = True
     conversation_id: Optional[int] = None  # Optional conversation ID to save to
 
+class SmartQueryRequest(BaseModel):
+    """Request for smart router endpoint"""
+    query: str
+    top_k: int = 5
+    confidence_threshold: float = 0.5
+    min_relevance_score: float = 2.0  # Minimum cross-encoder score to include results
+    conversation_id: Optional[int] = None
+
 class QueryResponse(BaseModel):
     results: List[Dict[str, Any]]
+    llm_response: Optional[str] = None
+    context_used: Optional[str] = None
+
+class SmartQueryResponse(BaseModel):
+    """Response from smart router with routing metadata"""
+    results: List[Dict[str, Any]]
+    llm_response: Optional[str] = None
+    context_used: Optional[str] = None
+    routing_decision: Dict[str, Any]  # Intent classification details
+    sources_queried: List[str]  # Which DBs were actually queried
     llm_response: Optional[str] = None
     context_used: Optional[str] = None
 
@@ -156,24 +185,52 @@ class CodeQueryEngine:
 # --- LLM Integration ---
 
 class LLMService:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, rate_limiter: Optional[GroqRateLimiter] = None):
         self.client = Groq(api_key=api_key)
+        self.rate_limiter = rate_limiter or GroqRateLimiter(
+            max_retries=3,
+            base_delay=2.0,
+            daily_token_limit=100000,
+            enable_cache=True,
+            cache_ttl=1800  # 30 minutes
+        )
 
-    def generate_response(self, system_prompt: str, user_query: str, context: str) -> str:
+    def generate_response(self, system_prompt: str, user_query: str, context: str, model: str = "llama-3.3-70b-versatile") -> str:
+        """Generate LLM response with retry logic and caching"""
         try:
-            chat_completion = self.client.chat.completions.create(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Context:\n{context}\n\nQuery: {user_query}"}
-                ],
-                model="llama-3.3-70b-versatile",
+            @self.rate_limiter.with_retry
+            def _make_completion(client, messages, model, temperature, max_tokens):
+                return client.chat.completions.create(
+                    messages=messages,
+                    model=model,
+                    temperature=temperature,
+                    max_tokens=max_tokens
+                )
+            
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Context:\n{context}\n\nQuery: {user_query}"}
+            ]
+            
+            chat_completion = _make_completion(
+                client=self.client,
+                messages=messages,
+                model=model,
                 temperature=0.3,
                 max_tokens=2048
             )
             return chat_completion.choices[0].message.content
+            
         except Exception as e:
-            logger.error(f"LLM Error: {e}")
+            logger.error(f"LLM Error after retries: {e}")
+            # Check if rate limit error
+            if "rate_limit" in str(e).lower():
+                return f"⚠️ Rate limit reached. Please try again in a few minutes or upgrade your Groq plan. The system will automatically retry with a smaller model."
             return f"Error generating response: {str(e)}"
+    
+    def get_usage_stats(self) -> Dict[str, Any]:
+        """Get token usage statistics"""
+        return self.rate_limiter.get_usage_stats()
 
 # --- Global Instances (Lazy Loading strategy or Global Init) ---
 # We initialize on startup
@@ -182,10 +239,11 @@ php_engine = None
 js_engine = None
 blade_engine = None
 llm_service = None
+unified_query_engine = None  # Smart router
 
 @app.on_event("startup")
 def startup_event():
-    global business_engine, php_engine, js_engine, blade_engine, llm_service
+    global business_engine, php_engine, js_engine, blade_engine, llm_service, unified_query_engine
     
     # Initialize Database
     try:
@@ -243,12 +301,109 @@ def startup_event():
     if GROQ_API_KEY:
         llm_service = LLMService(GROQ_API_KEY)
         logger.info("LLM Service Ready")
+    
+    # Initialize Unified Query Engine (Smart Router)
+    try:
+        if all([business_engine, php_engine, js_engine, blade_engine, llm_service, GROQ_API_KEY]):
+            intent_classifier = IntentClassifier(groq_api_key=GROQ_API_KEY, model="llama-3.1-8b-instant")
+            query_router = QueryRouter(
+                business_engine=business_engine,
+                php_engine=php_engine,
+                js_engine=js_engine,
+                blade_engine=blade_engine
+            )
+            unified_query_engine = UnifiedQueryEngine(
+                intent_classifier=intent_classifier,
+                query_router=query_router,
+                llm_service=llm_service
+            )
+            logger.info("✅ Unified Query Engine (Smart Router) Ready")
+        else:
+            logger.warning("⚠️ Unified Query Engine not initialized - some engines missing")
+    except Exception as e:
+        logger.error(f"Failed to initialize Unified Query Engine: {e}")
 
 # --- Helper to Format Context ---
 def format_context(results: List[Dict]) -> str:
     return "\n\n".join([f"[Source: {r['metadata'].get('file_path') or r['metadata'].get('page_name') or 'N/A'}]\n{r['content']}" for r in results])
 
 # --- Endpoints ---
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint with engine status"""
+    return {
+        "status": "healthy",
+        "engines": {
+            "business_docs": business_engine is not None,
+            "php_code": php_engine is not None,
+            "js_code": js_engine is not None,
+            "blade_templates": blade_engine is not None,
+            "llm_service": llm_service is not None,
+            "smart_router": unified_query_engine is not None
+        }
+    }
+
+@app.post("/inference/smart", response_model=SmartQueryResponse)
+async def inference_smart(request: SmartQueryRequest, db: Session = Depends(database.get_db)):
+    """
+    🚀 Smart Query Router - Automatically routes queries to appropriate vector DB(s)
+    
+    This endpoint uses LLM-based intent classification to determine which knowledge sources
+    to query (business docs, PHP code, JS code, or Blade templates). It can query multiple
+    sources in parallel and merge results using Reciprocal Rank Fusion (RRF).
+    
+    Features:
+    - Automatic intent classification using function calling
+    - Parallel multi-source querying
+    - RRF-based result fusion
+    - Context-aware response generation
+    """
+    if not unified_query_engine:
+        raise HTTPException(
+            status_code=503, 
+            detail="Smart router not initialized. Please ensure all engines are loaded."
+        )
+    
+    try:
+        # Execute smart query with routing
+        result = await unified_query_engine.smart_query(
+            query=request.query,
+            top_k=request.top_k,
+            confidence_threshold=request.confidence_threshold,
+            min_relevance_score=request.min_relevance_score
+        )
+        
+        # Save to database if conversation_id provided
+        if request.conversation_id:
+            try:
+                # Save user message
+                crud.create_message(db, request.conversation_id, MessageRole.USER, request.query)
+                # Save bot response with routing metadata
+                if result['llm_response']:
+                    # Include routing decision in context for future reference
+                    context_with_metadata = f"[Routing: {', '.join(result['sources_queried'])}]\n\n{result['context']}"
+                    crud.create_message(
+                        db, 
+                        request.conversation_id, 
+                        MessageRole.BOT, 
+                        result['llm_response'], 
+                        context_with_metadata
+                    )
+            except Exception as e:
+                logger.error(f"Error saving to database: {e}")
+        
+        return SmartQueryResponse(
+            results=result['results'],
+            llm_response=result['llm_response'],
+            context_used=result['context'],
+            routing_decision=result['routing_decision'],
+            sources_queried=result['sources_queried']
+        )
+        
+    except Exception as e:
+        logger.error(f"Smart query failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Smart query failed: {str(e)}")
 
 @app.post("/inference/business", response_model=QueryResponse)
 async def inference_business(request: QueryRequest, db: Session = Depends(database.get_db)):
@@ -384,6 +539,50 @@ Guidelines:
     } for r in blade_results]
         
     return QueryResponse(results=formatted_results, llm_response=llm_response, context_used=context)
+
+@app.get("/api/token-usage")
+async def get_token_usage():
+    """Get token usage statistics across all services"""
+    stats = {
+        "llm_service": None,
+        "unified_query_engine": None,
+        "timestamp": datetime.now().isoformat()
+    }
+    
+    try:
+        if llm_service:
+            stats["llm_service"] = llm_service.get_usage_stats()
+        
+        if unified_query_engine and hasattr(unified_query_engine, 'intent_classifier'):
+            intent_classifier = unified_query_engine.intent_classifier
+            if hasattr(intent_classifier, 'rate_limiter'):
+                stats["intent_classifier"] = intent_classifier.rate_limiter.get_usage_stats()
+        
+        return stats
+    except Exception as e:
+        logger.error(f"Error getting token usage: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/clear-cache")
+async def clear_cache():
+    """Clear all API response caches"""
+    try:
+        cleared = []
+        
+        if llm_service and hasattr(llm_service, 'rate_limiter'):
+            llm_service.rate_limiter.clear_cache()
+            cleared.append("llm_service")
+        
+        if unified_query_engine and hasattr(unified_query_engine, 'intent_classifier'):
+            intent_classifier = unified_query_engine.intent_classifier
+            if hasattr(intent_classifier, 'rate_limiter'):
+                intent_classifier.rate_limiter.clear_cache()
+                cleared.append("intent_classifier")
+        
+        return {"message": "Cache cleared successfully", "services": cleared}
+    except Exception as e:
+        logger.error(f"Error clearing cache: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":
     uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)

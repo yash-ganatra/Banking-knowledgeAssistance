@@ -26,3 +26,12 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-gray-400;
 }
+/* Hide scrollbar for conversation list */
+.scrollbar-hide {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;  /* Chrome, Safari and Opera */
+}

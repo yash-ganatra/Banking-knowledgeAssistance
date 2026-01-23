@@ -49,12 +49,12 @@ function ChatApp() {
     }
   }, [isDarkMode]);
 
-  const [selectedContext, setSelectedContext] = useState('business'); // business, php, js, blade
+  const [selectedContext, setSelectedContext] = useState('smart'); // smart, business, php, js, blade
   const [messages, setMessages] = useState([
     {
       id: 1,
       role: 'bot',
-      content: 'Hello! I am your advanced banking assistant. Please select a knowledge base context and ask your question.'
+      content: 'Hello! I am your advanced banking assistant with smart routing. Ask your question and I will automatically select the best knowledge base for you.'
     }
   ]);
   const [inputValue, setInputValue] = useState('');
@@ -217,6 +217,7 @@ function ChatApp() {
 
   // Context Options
   const contexts = [
+    { id: 'smart', label: 'Smart Routing', icon: <Shield size={18} />, description: 'AI auto-selects best source' },
     { id: 'business', label: 'Business Docs', icon: <FileText size={18} /> },
     { id: 'php', label: 'PHP Knowledge', icon: <Database size={18} /> },
     { id: 'js', label: 'JS Knowledge', icon: <Code size={18} /> },
@@ -296,7 +297,8 @@ function ChatApp() {
         id: Date.now() + 1,
         role: 'bot',
         content: data.llm_response || "I found some relevant information but couldn't generate a summary. Please check the context chunks if available.",
-        context_used: data.context_used
+        context_used: data.context_used,
+        routing_info: data.routing_info  // Add routing info for smart routing
       };
 
       setMessages(prev => [...prev, botResponse]);
@@ -354,7 +356,7 @@ function ChatApp() {
                 </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-6">
 
                 {/* Context Selector - only show in chat view */}
                 {activeView === 'chat' && (
@@ -440,8 +442,8 @@ function ChatApp() {
                         No conversations yet. Start chatting!
                       </div>
                     ) : (
-                      <div className="space-y-1 max-h-64 overflow-y-auto">
-                        {conversations.slice(0, 10).map((conv) => (
+                      <div className="space-y-1 max-h-64 overflow-y-auto scrollbar-hide">
+                        {conversations.slice(0, 5).map((conv) => (
                           <div
                             key={conv.id}
                             onClick={() => !authLoading && loadConversation(conv.id)}
@@ -602,6 +604,20 @@ function ChatApp() {
                           </div>
                         </div>
                       </details>
+                    </div>
+                  )}
+
+                  {message.routing_info && (
+                    <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg text-xs">
+                      <div className="font-semibold text-blue-700 dark:text-blue-300 mb-1">🧠 Smart Routing</div>
+                      <div className="text-blue-600 dark:text-blue-400 space-y-1">
+                        <div><span className="font-medium">Primary:</span> {message.routing_info.primary_source}</div>
+                        {message.routing_info.secondary_sources?.length > 0 && (
+                          <div><span className="font-medium">Also searched:</span> {message.routing_info.secondary_sources.join(', ')}</div>
+                        )}
+                        <div><span className="font-medium">Confidence:</span> {(message.routing_info.confidence * 100).toFixed(0)}%</div>
+                        <div><span className="font-medium">Reason:</span> {message.routing_info.reasoning}</div>
+                      </div>
                     </div>
                   )}
                 </div>
