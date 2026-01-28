@@ -1,10 +1,12 @@
 """
 Centralized Query Router with LLM-based Intent Classification
 Uses function calling for structured routing decisions and RRF for result fusion
+Supports Hybrid Search (Dense + BM25 Sparse) for improved retrieval accuracy
 """
 
 import logging
 import asyncio
+import time
 from typing import List, Dict, Any, Optional, Tuple
 from enum import Enum
 import json
@@ -17,6 +19,8 @@ from groq import Groq
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.groq_rate_limiter import GroqRateLimiter
+from utils.bm25_index import BM25IndexManager
+from utils.hybrid_search import HybridSearchManager, HybridSearchConfig, SearchMethod
 
 logger = logging.getLogger(__name__)
 
@@ -222,22 +226,28 @@ Be precise and confident in your routing decisions. Secondary sources should onl
                     max_tokens=max_tokens
                 )
 
-            response = _make_classification(
-                client=self.client,
-                model=self.model,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Route this query: {query}"}
-                ],
-                tools=[{"type": "function", "function": self.routing_function}],
-                tool_choice={"type": "function", "function": {"name": "route_query"}},
-                temperature=0.1,  # Low temperature for consistent routing
-                max_tokens=200
-            )
-            
-            # Extract function call result
-            tool_call = response.choices[0].message.tool_calls[0]
-            routing_args = json.loads(tool_call.function.arguments)
+            # Try function calling first
+            try:
+                response = _make_classification(
+                    client=self.client,
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Route this query: {query}"}
+                    ],
+                    tools=[{"type": "function", "function": self.routing_function}],
+                    tool_choice={"type": "function", "function": {"name": "route_query"}},
+                    temperature=0.1,  # Low temperature for consistent routing
+                    max_tokens=200
+                )
+                
+                # Extract function call result
+                tool_call = response.choices[0].message.tool_calls[0]
+                routing_args = json.loads(tool_call.function.arguments)
+            except Exception as func_error:
+                # Function calling failed, try JSON mode fallback
+                logger.warning(f"Function calling failed, trying JSON fallback: {func_error}")
+                routing_args = self._classify_with_json_fallback(query, system_prompt)
             
             # Parse and validate
             primary_source = KnowledgeSource(routing_args["primary_source"])
@@ -248,10 +258,10 @@ Be precise and confident in your routing decisions. Secondary sources should onl
             result = IntentClassificationResult(
                 primary_source=primary_source,
                 secondary_sources=secondary_sources,
-                confidence=routing_args["confidence"],
-                reasoning=routing_args["reasoning"],
-                query_type=QueryType(routing_args["query_type"]),
-                requires_code=routing_args["requires_code"]
+                confidence=routing_args.get("confidence", 0.7),
+                reasoning=routing_args.get("reasoning", "Routed based on query content"),
+                query_type=QueryType(routing_args.get("query_type", "mixed")),
+                requires_code=routing_args.get("requires_code", False)
             )
             
             logger.info(f"Intent Classification: {result.to_dict()}")
@@ -268,6 +278,120 @@ Be precise and confident in your routing decisions. Secondary sources should onl
                 query_type=QueryType.MIXED,
                 requires_code=False
             )
+    
+    def _classify_with_json_fallback(self, query: str, system_prompt: str) -> dict:
+        """
+        Fallback classification using direct JSON output when function calling fails.
+        This is more reliable with smaller models that sometimes fail tool use.
+        """
+        json_prompt = f"""{system_prompt}
+
+IMPORTANT: You must respond with ONLY a valid JSON object, no other text.
+The JSON must have this exact structure:
+{{
+    "primary_source": "one of: business_docs, php_code, js_code, blade_templates",
+    "secondary_sources": ["array of additional sources or empty array"],
+    "confidence": 0.8,
+    "reasoning": "brief explanation",
+    "query_type": "one of: documentation, implementation, debugging, architecture, mixed",
+    "requires_code": true or false
+}}
+
+Route this query: {query}
+
+Respond with ONLY the JSON object:"""
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            messages=[{"role": "user", "content": json_prompt}],
+            temperature=0.1,
+            max_tokens=300
+        )
+        
+        response_text = response.choices[0].message.content.strip()
+        
+        # Try to extract JSON from the response
+        # Handle cases where model adds markdown code blocks
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        # Try to parse the JSON
+        try:
+            routing_args = json.loads(response_text)
+        except json.JSONDecodeError:
+            # Try to find JSON object in the response
+            import re
+            json_match = re.search(r'\{[^{}]*\}', response_text, re.DOTALL)
+            if json_match:
+                routing_args = json.loads(json_match.group())
+            else:
+                # Last resort: keyword-based routing
+                logger.warning("JSON parsing failed, using keyword-based routing")
+                routing_args = self._keyword_based_routing(query)
+        
+        # Validate and ensure required fields
+        valid_sources = ["business_docs", "php_code", "js_code", "blade_templates"]
+        if routing_args.get("primary_source") not in valid_sources:
+            routing_args["primary_source"] = "business_docs"
+        
+        routing_args["secondary_sources"] = [
+            s for s in routing_args.get("secondary_sources", []) 
+            if s in valid_sources and s != routing_args["primary_source"]
+        ]
+        
+        return routing_args
+    
+    def _keyword_based_routing(self, query: str) -> dict:
+        """
+        Simple keyword-based routing as last fallback.
+        """
+        query_lower = query.lower()
+        
+        # PHP/Backend keywords
+        php_keywords = ["controller", "model", "service", "php", "laravel", "backend", 
+                       "api", "endpoint", "database", "query", "eloquent", "migration",
+                       "artisan", "command", "helper", "trait", "middleware"]
+        
+        # JS/Frontend keywords
+        js_keywords = ["javascript", "react", "component", "frontend", "state", 
+                      "hook", "redux", "axios", "fetch", "client", "browser", "dom"]
+        
+        # Blade keywords
+        blade_keywords = ["blade", "view", "template", "form", "html", "input", 
+                        "layout", "partial", ".blade.php", "ui", "interface"]
+        
+        # Business keywords
+        business_keywords = ["process", "workflow", "policy", "rule", "requirement",
+                           "kyc", "loan", "account type", "compliance", "regulation",
+                           "what is", "explain", "documentation", "business"]
+        
+        # Count matches
+        php_score = sum(1 for kw in php_keywords if kw in query_lower)
+        js_score = sum(1 for kw in js_keywords if kw in query_lower)
+        blade_score = sum(1 for kw in blade_keywords if kw in query_lower)
+        business_score = sum(1 for kw in business_keywords if kw in query_lower)
+        
+        scores = {
+            "php_code": php_score,
+            "js_code": js_score,
+            "blade_templates": blade_score,
+            "business_docs": business_score
+        }
+        
+        primary = max(scores, key=scores.get)
+        if scores[primary] == 0:
+            primary = "business_docs"  # Default
+        
+        return {
+            "primary_source": primary,
+            "secondary_sources": [],
+            "confidence": 0.5,
+            "reasoning": "Keyword-based fallback routing",
+            "query_type": "mixed",
+            "requires_code": primary in ["php_code", "js_code", "blade_templates"]
+        }
 
 
 class ResultFusion:
@@ -478,7 +602,8 @@ class ResultFusion:
 class QueryRouter:
     """
     Routes queries to appropriate vector database engines in parallel
-    with cross-encoder reranking for improved accuracy
+    with cross-encoder reranking for improved accuracy.
+    Supports Hybrid Search (Dense + BM25) for better exact term matching.
     """
     
     def __init__(self, 
@@ -486,7 +611,9 @@ class QueryRouter:
                  php_engine,
                  js_engine,
                  blade_engine,
-                 use_cross_encoder: bool = True):
+                 use_cross_encoder: bool = True,
+                 use_hybrid_search: bool = True,
+                 bm25_index_dir: str = None):
         """
         Initialize with all available query engines
         
@@ -496,6 +623,8 @@ class QueryRouter:
             js_engine: CodeQueryEngine for JavaScript
             blade_engine: BladeDescriptionEngine instance
             use_cross_encoder: Whether to use cross-encoder reranking
+            use_hybrid_search: Whether to use hybrid (dense + BM25) search
+            bm25_index_dir: Directory containing BM25 indices
         """
         self.engines = {
             KnowledgeSource.BUSINESS_DOCS: business_engine,
@@ -504,6 +633,43 @@ class QueryRouter:
             KnowledgeSource.BLADE_TEMPLATES: blade_engine
         }
         self.result_fusion = ResultFusion(k=60, use_cross_encoder=use_cross_encoder)
+        
+        # Initialize Hybrid Search
+        self.use_hybrid_search = use_hybrid_search
+        self.hybrid_manager = None
+        
+        if use_hybrid_search:
+            try:
+                # Determine BM25 index directory
+                if bm25_index_dir is None:
+                    project_root = Path(__file__).parent.parent
+                    bm25_index_dir = str(project_root / "bm25_indices")
+                
+                # Initialize BM25 manager and load indices
+                bm25_manager = BM25IndexManager(index_dir=bm25_index_dir)
+                load_results = bm25_manager.load_all_indices()
+                
+                # Configure hybrid search with weights favoring semantic for your use case
+                hybrid_config = HybridSearchConfig(
+                    dense_weight=0.6,   # Semantic understanding
+                    sparse_weight=0.4,  # Exact term matching (function names, etc.)
+                    rrf_k=60,
+                    min_bm25_score=0.5
+                )
+                
+                self.hybrid_manager = HybridSearchManager(bm25_manager, hybrid_config)
+                
+                # Log which indices loaded successfully
+                loaded = [k for k, v in load_results.items() if v]
+                if loaded:
+                    logger.info(f"Hybrid search enabled with BM25 indices: {loaded}")
+                else:
+                    logger.warning("No BM25 indices found. Run build_bm25_indices.py first.")
+                    self.use_hybrid_search = False
+                    
+            except Exception as e:
+                logger.warning(f"Failed to initialize hybrid search: {e}. Falling back to dense only.")
+                self.use_hybrid_search = False
     
     async def query_engine_async(self, 
                                  source: KnowledgeSource, 
@@ -594,6 +760,15 @@ class QueryRouter:
         results_by_source = {source_name: source_results 
                             for source_name, source_results in results}
         
+        # Apply hybrid search (combine with BM25) if enabled
+        if self.use_hybrid_search and self.hybrid_manager:
+            results_by_source = self.hybrid_manager.search_multi_source(
+                results_by_source=results_by_source,
+                query=query,
+                top_k=top_k
+            )
+            logger.info(f"Hybrid search applied to {len(results_by_source)} sources")
+        
         return results_by_source
     
     async def query_multi_source(self,
@@ -642,7 +817,8 @@ class QueryRouter:
                           query: str,
                           top_k: int = 5,
                           final_top_k: Optional[int] = None,
-                          min_relevance_score: float = 2.0) -> List[Dict]:
+                          min_relevance_score: float = 2.0,
+                          inference_logger = None) -> List[Dict]:
         """
         Query multiple sources with configurable relevance filtering
         
@@ -652,6 +828,7 @@ class QueryRouter:
             top_k: Number of results to get from each source
             final_top_k: Final number of merged results (defaults to top_k)
             min_relevance_score: Minimum cross-encoder score to include
+            inference_logger: Optional logger for tracking
             
         Returns:
             Merged, filtered and ranked results
@@ -661,7 +838,14 @@ class QueryRouter:
         
         # Run parallel queries - get more candidates for reranking
         retrieve_k = top_k * 2
+        retrieval_start = time.time()
         results_by_source = await self.query_parallel(sources, query, retrieve_k)
+        retrieval_time_ms = (time.time() - retrieval_start) * 1000
+        
+        # Log initial retrieval for each source
+        if inference_logger:
+            for source_name, results in results_by_source.items():
+                inference_logger.log_initial_retrieval(source_name, results, retrieval_time_ms / len(results_by_source))
         
         # Pre-filter results: Remove obviously irrelevant results BEFORE RRF
         # This prevents low-quality results from polluting the fusion
@@ -695,20 +879,33 @@ class QueryRouter:
             source_quality_threshold=0.35
         )
         
+        # Log RRF fusion
+        if inference_logger:
+            inference_logger.log_rrf_fusion(merged_results)
+            # Also log before reranking snapshot
+            inference_logger.log_before_reranking(merged_results)
+        
         # Apply cross-encoder reranking with CONFIGURABLE relevance filtering
+        rerank_start = time.time()
         reranked_results = self.result_fusion.rerank_with_cross_encoder(
             query=query,
             results=merged_results,
             top_k=final_top_k,
             min_score=min_relevance_score  # Use user-provided threshold
         )
+        rerank_time_ms = (time.time() - rerank_start) * 1000
+        
+        # Log reranking
+        if inference_logger:
+            inference_logger.log_reranking(reranked_results, rerank_time_ms)
         
         return reranked_results
     
     async def query_single_source(self,
                            source: KnowledgeSource,
                            query: str,
-                           top_k: int = 5) -> List[Dict]:
+                           top_k: int = 5,
+                           inference_logger = None) -> List[Dict]:
         """
         Query a single source directly (no RRF needed)
         
@@ -716,13 +913,24 @@ class QueryRouter:
             source: Knowledge source to query
             query: User query text
             top_k: Number of results
+            inference_logger: Optional logger for tracking
             
         Returns:
             Results from the source
         """
+        retrieval_start = time.time()
         results_by_source = await self.query_parallel([source], query, top_k)
+        retrieval_time_ms = (time.time() - retrieval_start) * 1000
         
-        return results_by_source.get(source.value, [])
+        results = results_by_source.get(source.value, [])
+        
+        # Log retrieval
+        if inference_logger:
+            inference_logger.log_initial_retrieval(source.value, results, retrieval_time_ms)
+            # For single source, also log as final results
+            inference_logger.log_reranking(results, 0)
+        
+        return results
 
 
 class UnifiedQueryEngine:
@@ -783,7 +991,8 @@ class UnifiedQueryEngine:
                    query: str,
                    top_k: int = 5,
                    confidence_threshold: float = 0.5,
-                   min_relevance_score: float = 2.0) -> Dict[str, Any]:
+                   min_relevance_score: float = 2.0,
+                   inference_logger = None) -> Dict[str, Any]:
         """
         Execute smart routing and retrieval with preprocessing
         
@@ -792,6 +1001,7 @@ class UnifiedQueryEngine:
             top_k: Number of results to return
             confidence_threshold: Minimum confidence to include secondary sources
             min_relevance_score: Minimum cross-encoder score for relevance filtering
+            inference_logger: Optional InferenceLogger instance for detailed logging
             
         Returns:
             Dict containing:
@@ -806,8 +1016,14 @@ class UnifiedQueryEngine:
         if processed_query != query:
             logger.info(f"Preprocessed query: {processed_query}")
         
+        # Log preprocessing
+        if inference_logger:
+            inference_logger.log_preprocessing(processed_query)
+        
         # Step 1: Classify intent (use original query for better understanding)
+        routing_start = time.time()
         intent = self.intent_classifier.classify(query)
+        routing_time_ms = (time.time() - routing_start) * 1000
         
         # Step 2: Determine sources to query
         sources_to_query = [intent.primary_source]
@@ -831,13 +1047,27 @@ class UnifiedQueryEngine:
         # Remove duplicates while preserving order
         sources_to_query = list(dict.fromkeys(sources_to_query))
         
+        # Log routing decision
+        if inference_logger:
+            inference_logger.log_routing_decision(
+                primary_source=intent.primary_source.value,
+                secondary_sources=[s.value for s in intent.secondary_sources],
+                confidence=intent.confidence,
+                reasoning=intent.reasoning,
+                query_type=intent.query_type.value,
+                routing_time_ms=routing_time_ms
+            )
+            inference_logger.log_sources_queried([s.value for s in sources_to_query])
+        
         # Step 3: Query appropriate sources (use processed query for retrieval)
+        retrieval_start = time.time()
         if len(sources_to_query) == 1:
             # Single source - direct query (no aggressive filtering needed)
             results = await self.query_router.query_single_source(
                 sources_to_query[0],
                 processed_query,
-                top_k
+                top_k,
+                inference_logger=inference_logger
             )
         else:
             # Multi-source - use stricter filtering to remove irrelevant chunks
@@ -846,14 +1076,17 @@ class UnifiedQueryEngine:
                 processed_query,
                 top_k=top_k,
                 final_top_k=top_k,
-                min_relevance_score=min_relevance_score
+                min_relevance_score=min_relevance_score,
+                inference_logger=inference_logger
             )
+        retrieval_time_ms = (time.time() - retrieval_start) * 1000
         
         # Step 4: Format context
         context = self._format_context_multi_source(results)
         
         # Step 5: Generate LLM response
         llm_response = None
+        llm_start = time.time()
         if self.llm_service:
             system_prompt = self._build_system_prompt(sources_to_query, intent)
             llm_response = self.llm_service.generate_response(
@@ -861,6 +1094,11 @@ class UnifiedQueryEngine:
                 query,
                 context
             )
+        llm_time_ms = (time.time() - llm_start) * 1000
+        
+        # Log LLM time
+        if inference_logger:
+            inference_logger.log_llm_generation(llm_time_ms)
         
         return {
             "routing_decision": intent.to_dict(),

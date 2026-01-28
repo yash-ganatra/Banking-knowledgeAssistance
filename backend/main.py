@@ -264,6 +264,10 @@ def startup_event():
     from routers.code_review_routes import router as code_review_router
     app.include_router(code_review_router)
     
+    # Include inference logs routes
+    from routers.inference_logs import router as inference_logs_router
+    app.include_router(inference_logs_router)
+    
     # Initialize Business Engine
     try:
         business_engine = BusinessQueryEngine()
@@ -306,11 +310,17 @@ def startup_event():
     try:
         if all([business_engine, php_engine, js_engine, blade_engine, llm_service, GROQ_API_KEY]):
             intent_classifier = IntentClassifier(groq_api_key=GROQ_API_KEY, model="llama-3.1-8b-instant")
+            
+            # Initialize QueryRouter with Hybrid Search enabled
+            # BM25 indices should be in PROJECT_ROOT/bm25_indices
+            bm25_index_dir = os.path.join(PROJECT_ROOT, "bm25_indices")
             query_router = QueryRouter(
                 business_engine=business_engine,
                 php_engine=php_engine,
                 js_engine=js_engine,
-                blade_engine=blade_engine
+                blade_engine=blade_engine,
+                use_hybrid_search=True,  # Enable hybrid (dense + BM25) search
+                bm25_index_dir=bm25_index_dir
             )
             unified_query_engine = UnifiedQueryEngine(
                 intent_classifier=intent_classifier,
@@ -318,6 +328,12 @@ def startup_event():
                 llm_service=llm_service
             )
             logger.info("✅ Unified Query Engine (Smart Router) Ready")
+            
+            # Log hybrid search status
+            if query_router.use_hybrid_search:
+                logger.info("✅ Hybrid Search (Dense + BM25) enabled")
+            else:
+                logger.warning("⚠️ Hybrid Search disabled - run scripts/build_bm25_indices.py to enable")
         else:
             logger.warning("⚠️ Unified Query Engine not initialized - some engines missing")
     except Exception as e:
@@ -332,6 +348,15 @@ def format_context(results: List[Dict]) -> str:
 @app.get("/health")
 async def health_check():
     """Health check endpoint with engine status"""
+    # Check hybrid search status
+    hybrid_search_status = False
+    hybrid_search_indices = {}
+    if unified_query_engine and unified_query_engine.query_router:
+        router = unified_query_engine.query_router
+        hybrid_search_status = router.use_hybrid_search
+        if hybrid_search_status and router.hybrid_manager:
+            hybrid_search_indices = router.hybrid_manager.get_stats().get('bm25_indices', {})
+    
     return {
         "status": "healthy",
         "engines": {
@@ -341,6 +366,10 @@ async def health_check():
             "blade_templates": blade_engine is not None,
             "llm_service": llm_service is not None,
             "smart_router": unified_query_engine is not None
+        },
+        "hybrid_search": {
+            "enabled": hybrid_search_status,
+            "bm25_indices": hybrid_search_indices
         }
     }
 
@@ -358,6 +387,7 @@ async def inference_smart(request: SmartQueryRequest, db: Session = Depends(data
     - Parallel multi-source querying
     - RRF-based result fusion
     - Context-aware response generation
+    - Comprehensive inference logging
     """
     if not unified_query_engine:
         raise HTTPException(
@@ -365,13 +395,19 @@ async def inference_smart(request: SmartQueryRequest, db: Session = Depends(data
             detail="Smart router not initialized. Please ensure all engines are loaded."
         )
     
+    # Initialize inference logger
+    from inference_logger import InferenceLogger
+    inference_logger = InferenceLogger(db)
+    inference_logger.start_inference(request.query)
+    
     try:
-        # Execute smart query with routing
+        # Execute smart query with routing and logging
         result = await unified_query_engine.smart_query(
             query=request.query,
             top_k=request.top_k,
             confidence_threshold=request.confidence_threshold,
-            min_relevance_score=request.min_relevance_score
+            min_relevance_score=request.min_relevance_score,
+            inference_logger=inference_logger
         )
         
         # Save to database if conversation_id provided
@@ -393,6 +429,13 @@ async def inference_smart(request: SmartQueryRequest, db: Session = Depends(data
             except Exception as e:
                 logger.error(f"Error saving to database: {e}")
         
+        # Save inference log
+        try:
+            inference_logger.finalize(success=True)
+            inference_logger.save_to_db()
+        except Exception as e:
+            logger.error(f"Error saving inference log: {e}")
+        
         return SmartQueryResponse(
             results=result['results'],
             llm_response=result['llm_response'],
@@ -403,6 +446,12 @@ async def inference_smart(request: SmartQueryRequest, db: Session = Depends(data
         
     except Exception as e:
         logger.error(f"Smart query failed: {e}", exc_info=True)
+        # Log the failure
+        try:
+            inference_logger.finalize(success=False, error_message=str(e))
+            inference_logger.save_to_db()
+        except:
+            pass
         raise HTTPException(status_code=500, detail=f"Smart query failed: {str(e)}")
 
 @app.post("/inference/business", response_model=QueryResponse)

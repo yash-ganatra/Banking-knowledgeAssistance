@@ -5,7 +5,7 @@ Designed to be scalable for multi-user platform.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum, Boolean, Float, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship
 import enum
@@ -94,3 +94,125 @@ class Message(Base):
 
     def __repr__(self):
         return f"<Message(id={self.id}, role='{self.role}', conversation_id={self.conversation_id})>"
+
+
+# ============================================================
+# INFERENCE LOGGING MODELS
+# ============================================================
+
+class InferenceLog(Base):
+    """
+    Comprehensive log of each inference request.
+    Tracks the complete pipeline from query to response.
+    """
+    __tablename__ = "inference_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Request Info
+    query = Column(Text, nullable=False)
+    processed_query = Column(Text, nullable=True)  # After preprocessing (abbreviation expansion)
+    endpoint = Column(String(50), nullable=False)  # smart, php, js, blade, business
+    top_k = Column(Integer, default=5)
+    confidence_threshold = Column(Float, nullable=True)
+    min_relevance_score = Column(Float, nullable=True)
+    
+    # Routing Decision (for smart router)
+    primary_source = Column(String(50), nullable=True)
+    secondary_sources = Column(JSON, nullable=True)  # List of secondary sources
+    routing_confidence = Column(Float, nullable=True)
+    routing_reasoning = Column(Text, nullable=True)
+    query_type = Column(String(50), nullable=True)  # documentation, implementation, debugging, etc.
+    
+    # Retrieval Stats
+    sources_queried = Column(JSON, nullable=True)  # List of sources actually queried
+    total_chunks_retrieved = Column(Integer, default=0)
+    chunks_after_filtering = Column(Integer, default=0)
+    chunks_after_reranking = Column(Integer, default=0)
+    
+    # Hybrid Search Stats
+    hybrid_search_used = Column(Boolean, default=False)
+    dense_results_count = Column(Integer, nullable=True)
+    sparse_results_count = Column(Integer, nullable=True)
+    found_by_both_count = Column(Integer, nullable=True)
+    
+    # Timing
+    total_time_ms = Column(Float, nullable=True)
+    routing_time_ms = Column(Float, nullable=True)
+    retrieval_time_ms = Column(Float, nullable=True)
+    reranking_time_ms = Column(Float, nullable=True)
+    llm_time_ms = Column(Float, nullable=True)
+    
+    # User/Session Info
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True)
+    session_id = Column(String(100), nullable=True)  # For tracking anonymous sessions
+    
+    # Status
+    success = Column(Boolean, default=True)
+    error_message = Column(Text, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    conversation = relationship("Conversation", foreign_keys=[conversation_id])
+    retrieval_details = relationship("RetrievalDetail", back_populates="inference_log", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<InferenceLog(id={self.id}, endpoint='{self.endpoint}', query='{self.query[:50]}...')>"
+
+
+class RetrievalDetail(Base):
+    """
+    Detailed log of each chunk retrieved during inference.
+    Tracks chunks at different stages: initial retrieval, after filtering, after reranking.
+    """
+    __tablename__ = "retrieval_details"
+
+    id = Column(Integer, primary_key=True, index=True)
+    inference_log_id = Column(Integer, ForeignKey("inference_logs.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Chunk Info
+    chunk_id = Column(String(200), nullable=False)
+    source = Column(String(50), nullable=False)  # php_code, js_code, blade_templates, business_docs
+    content_preview = Column(Text, nullable=True)  # First 500 chars of content
+    
+    # Metadata
+    file_path = Column(String(500), nullable=True)
+    file_name = Column(String(200), nullable=True)
+    class_name = Column(String(200), nullable=True)
+    method_name = Column(String(200), nullable=True)
+    
+    # Scores at different stages
+    initial_rank = Column(Integer, nullable=True)
+    initial_distance = Column(Float, nullable=True)
+    
+    # Hybrid search scores
+    bm25_score = Column(Float, nullable=True)
+    bm25_rank = Column(Integer, nullable=True)
+    hybrid_rrf_score = Column(Float, nullable=True)
+    found_by_both = Column(Boolean, default=False)
+    search_methods = Column(JSON, nullable=True)  # ["dense", "sparse"]
+    
+    # After RRF fusion
+    rrf_score = Column(Float, nullable=True)
+    rrf_rank = Column(Integer, nullable=True)
+    
+    # After cross-encoder reranking
+    cross_encoder_score = Column(Float, nullable=True)
+    final_rank = Column(Integer, nullable=True)
+    
+    # Stage tracking
+    stage = Column(String(50), nullable=False)  # initial, after_hybrid, after_rrf, after_rerank, final
+    included_in_context = Column(Boolean, default=False)  # Was this chunk used in LLM context?
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    inference_log = relationship("InferenceLog", back_populates="retrieval_details")
+
+    def __repr__(self):
+        return f"<RetrievalDetail(id={self.id}, chunk_id='{self.chunk_id}', stage='{self.stage}')>"
