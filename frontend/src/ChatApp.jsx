@@ -543,7 +543,9 @@ function ChatApp() {
           {activeView === 'code-review' ? (
             <CodeReview isDarkMode={isDarkMode} />
           ) : activeView === 'inference-logs' ? (
-            <InferenceLogs />
+            <div className="flex-1 overflow-y-auto h-full relative">
+              <InferenceLogs />
+            </div>
           ) : (
             <>
           <div className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-6">

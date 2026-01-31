@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { 
-  Database, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight, 
+import {
+  Database, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight,
   Activity, Zap, Filter, RefreshCw, Trash2, Eye, BarChart2
 } from 'lucide-react';
 
@@ -14,7 +14,7 @@ const SourceBadge = ({ source }) => {
     blade_templates: 'bg-green-500/20 text-green-300 border-green-500/30',
     business_docs: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
   };
-  
+
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs border ${colors[source] || 'bg-gray-500/20 text-gray-300 border-gray-500/30'}`}>
       {source?.replace('_', ' ')}
@@ -30,7 +30,7 @@ const StatCard = ({ icon: Icon, label, value, subtext, color = 'blue' }) => {
     red: 'bg-red-500/10 text-red-400 border-red-500/30',
     yellow: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
   };
-  
+
   return (
     <div className={`rounded-lg border p-4 ${colorClasses[color]}`}>
       <div className="flex items-center gap-2 mb-2">
@@ -81,7 +81,7 @@ const PipelineStage = ({ stage, isLast }) => {
             Retrieved: {stage.total_chunks} chunks
             {stage.hybrid_search_used && (
               <span className="ml-2 text-green-400">
-                (Hybrid: {stage.dense_results} dense + {stage.sparse_results} sparse, 
+                (Hybrid: {stage.dense_results} dense + {stage.sparse_results} sparse,
                 {stage.found_by_both} overlap)
               </span>
             )}
@@ -100,10 +100,10 @@ const PipelineStage = ({ stage, isLast }) => {
 // Log row component
 const LogRow = ({ log, onViewDetails }) => {
   const [expanded, setExpanded] = useState(false);
-  
+
   return (
     <div className="border border-gray-700 rounded-lg bg-gray-800/50 overflow-hidden">
-      <div 
+      <div
         className="p-4 cursor-pointer hover:bg-gray-700/50 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
@@ -153,7 +153,7 @@ const LogRow = ({ log, onViewDetails }) => {
           </div>
         </div>
       </div>
-      
+
       {expanded && (
         <div className="border-t border-gray-700 p-4 bg-gray-900/50">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -220,14 +220,14 @@ const ChunkCard = ({ chunk, type }) => {
   const displayRank = isBefore ? (chunk.rrf_rank || '?') : (chunk.final_rank || '?');
   const borderColor = isBefore ? 'border-amber-500/30' : isAfter ? 'border-emerald-500/30' : 'border-gray-700';
   const rankBg = isBefore ? 'bg-amber-500/20 text-amber-400' : 'bg-emerald-500/20 text-emerald-400';
-  
-  const displayName = chunk.file_path 
-    ? chunk.file_path.split(/[\\\/]/).pop() 
+
+  const displayName = chunk.file_path
+    ? chunk.file_path.split(/[\\\/]/).pop()
     : (chunk.file_name || chunk.chunk_id?.replace('_before', '') || 'Unknown');
-  
+
   return (
     <div className={`bg-gray-900/50 rounded-lg border ${borderColor} overflow-hidden`}>
-      <div 
+      <div
         className="p-3 cursor-pointer hover:bg-gray-800/50 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
@@ -297,7 +297,7 @@ const DetailModal = ({ logId, onClose }) => {
   const [pipelineData, setPipelineData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pipeline');
-  
+
   useEffect(() => {
     const fetchDetails = async () => {
       try {
@@ -314,20 +314,20 @@ const DetailModal = ({ logId, onClose }) => {
     };
     fetchDetails();
   }, [logId]);
-  
+
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-gray-800 rounded-xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="p-4 border-b border-gray-700 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">Inference Pipeline Details</h2>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-white"
           >
             ✕
           </button>
         </div>
-        
+
         <div className="flex-1 overflow-y-auto p-4">
           {loading ? (
             <div className="flex items-center justify-center h-48">
@@ -355,33 +355,32 @@ const DetailModal = ({ logId, onClose }) => {
                   )}
                 </div>
               </div>
-              
+
               {/* Tabs */}
               <div className="flex gap-2 border-b border-gray-700 pb-3">
                 {['pipeline', 'before', 'after', 'comparison'].map(tab => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeTab === tab 
-                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                         : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                    }`}
+                      }`}
                   >
-                    {tab === 'pipeline' ? 'Pipeline' : 
-                     tab === 'before' ? `Before Rerank (${pipelineData.rerank_summary?.before_count || 0})` :
-                     tab === 'after' ? `After Rerank (${pipelineData.rerank_summary?.after_count || 0})` :
-                     'Comparison'}
+                    {tab === 'pipeline' ? 'Pipeline' :
+                      tab === 'before' ? `Before Rerank (${pipelineData.rerank_summary?.before_count || 0})` :
+                        tab === 'after' ? `After Rerank (${pipelineData.rerank_summary?.after_count || 0})` :
+                          'Comparison'}
                   </button>
                 ))}
               </div>
-              
+
               {/* Rerank Summary Banner */}
               {pipelineData.rerank_summary && (
                 <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-3 text-sm">
                   <Zap className="w-5 h-5 text-amber-400" />
                   <span className="text-amber-300">
-                    Cross-encoder filtered <span className="font-bold">{pipelineData.rerank_summary.before_count}</span> chunks 
+                    Cross-encoder filtered <span className="font-bold">{pipelineData.rerank_summary.before_count}</span> chunks
                     down to <span className="font-bold text-emerald-400">{pipelineData.rerank_summary.after_count}</span>
                     {pipelineData.rerank_summary.filtered_out > 0 && (
                       <span className="text-red-400"> ({pipelineData.rerank_summary.filtered_out} removed)</span>
@@ -389,16 +388,16 @@ const DetailModal = ({ logId, onClose }) => {
                   </span>
                 </div>
               )}
-              
+
               {/* Tab Content */}
               {activeTab === 'pipeline' ? (
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-4">Pipeline Stages</h3>
                   <div className="space-y-2">
                     {pipelineData.stages?.map((stage, idx) => (
-                      <PipelineStage 
-                        key={idx} 
-                        stage={stage} 
+                      <PipelineStage
+                        key={idx}
+                        stage={stage}
                         isLast={idx === pipelineData.stages.length - 1}
                       />
                     ))}
@@ -450,7 +449,7 @@ const DetailModal = ({ logId, onClose }) => {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* After Column */}
                   <div>
                     <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-700">
@@ -489,7 +488,7 @@ export default function InferenceLogs() {
     successOnly: null,
     source: '',
   });
-  
+
   const fetchLogs = async () => {
     setLoading(true);
     try {
@@ -498,12 +497,12 @@ export default function InferenceLogs() {
       if (filters.successOnly !== null) params.append('success_only', filters.successOnly);
       if (filters.source) params.append('source', filters.source);
       params.append('limit', '100');
-      
+
       const [logsRes, summaryRes] = await Promise.all([
         fetch(`${API_BASE_URL}/inference-logs/?${params}`),
         fetch(`${API_BASE_URL}/inference-logs/summary?hours_ago=${filters.hoursAgo || 24}`)
       ]);
-      
+
       if (logsRes.ok) setLogs(await logsRes.json());
       if (summaryRes.ok) setSummary(await summaryRes.json());
     } catch (error) {
@@ -512,13 +511,13 @@ export default function InferenceLogs() {
       setLoading(false);
     }
   };
-  
+
   useEffect(() => {
     fetchLogs();
   }, [filters]);
-  
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4 md:p-8">
+    <div className="min-h-full bg-gradient-to-br from-slate-900 via-blue-900 to-slate-900 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -531,7 +530,7 @@ export default function InferenceLogs() {
               Track and analyze RAG pipeline performance
             </p>
           </div>
-          <button 
+          <button
             onClick={fetchLogs}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-500/30 rounded-lg text-blue-400 transition-colors disabled:opacity-50"
@@ -540,32 +539,32 @@ export default function InferenceLogs() {
             Refresh
           </button>
         </div>
-        
+
         {/* Summary cards */}
         {summary && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <StatCard 
+            <StatCard
               icon={BarChart2}
               label="Total Queries"
               value={summary.total_queries}
               subtext={`Last ${filters.hoursAgo || 24}h`}
               color="blue"
             />
-            <StatCard 
+            <StatCard
               icon={CheckCircle}
               label="Successful"
               value={summary.successful_queries}
               subtext={`${summary.total_queries > 0 ? ((summary.successful_queries / summary.total_queries) * 100).toFixed(0) : 0}% success rate`}
               color="green"
             />
-            <StatCard 
+            <StatCard
               icon={Clock}
               label="Avg Response"
               value={`${summary.avg_response_time_ms?.toFixed(0) || 0}ms`}
               subtext="Average latency"
               color="yellow"
             />
-            <StatCard 
+            <StatCard
               icon={Database}
               label="Avg Chunks"
               value={summary.avg_chunks_retrieved?.toFixed(1) || 0}
@@ -574,12 +573,12 @@ export default function InferenceLogs() {
             />
           </div>
         )}
-        
+
         {/* Filters */}
         <div className="flex flex-wrap gap-4 mb-6">
           <select
             value={filters.hoursAgo || ''}
-            onChange={(e) => setFilters({...filters, hoursAgo: e.target.value ? parseInt(e.target.value) : null})}
+            onChange={(e) => setFilters({ ...filters, hoursAgo: e.target.value ? parseInt(e.target.value) : null })}
             className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-200 text-sm focus:border-blue-500 focus:outline-none"
           >
             <option value="1">Last hour</option>
@@ -588,20 +587,20 @@ export default function InferenceLogs() {
             <option value="48">Last 48 hours</option>
             <option value="168">Last week</option>
           </select>
-          
+
           <select
             value={filters.successOnly === null ? '' : filters.successOnly.toString()}
-            onChange={(e) => setFilters({...filters, successOnly: e.target.value === '' ? null : e.target.value === 'true'})}
+            onChange={(e) => setFilters({ ...filters, successOnly: e.target.value === '' ? null : e.target.value === 'true' })}
             className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-200 text-sm focus:border-blue-500 focus:outline-none"
           >
             <option value="">All results</option>
             <option value="true">Successful only</option>
             <option value="false">Failed only</option>
           </select>
-          
+
           <select
             value={filters.source}
-            onChange={(e) => setFilters({...filters, source: e.target.value})}
+            onChange={(e) => setFilters({ ...filters, source: e.target.value })}
             className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-gray-200 text-sm focus:border-blue-500 focus:outline-none"
           >
             <option value="">All sources</option>
@@ -611,7 +610,7 @@ export default function InferenceLogs() {
             <option value="business_docs">Business Docs</option>
           </select>
         </div>
-        
+
         {/* Logs list */}
         <div className="space-y-3">
           {loading ? (
@@ -625,21 +624,21 @@ export default function InferenceLogs() {
             </div>
           ) : (
             logs.map(log => (
-              <LogRow 
-                key={log.id} 
-                log={log} 
+              <LogRow
+                key={log.id}
+                log={log}
                 onViewDetails={setSelectedLogId}
               />
             ))
           )}
         </div>
       </div>
-      
+
       {/* Detail modal */}
       {selectedLogId && (
-        <DetailModal 
-          logId={selectedLogId} 
-          onClose={() => setSelectedLogId(null)} 
+        <DetailModal
+          logId={selectedLogId}
+          onClose={() => setSelectedLogId(null)}
         />
       )}
     </div>

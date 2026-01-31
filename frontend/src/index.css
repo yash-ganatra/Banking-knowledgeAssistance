@@ -3,9 +3,17 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    @apply min-h-screen overflow-y-auto overflow-x-hidden;
+  }
+  
   body {
-    @apply antialiased text-gray-800 bg-white;
+    @apply antialiased text-gray-800 bg-white min-h-screen;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+  
+  #root {
+    @apply min-h-screen;
   }
 }
 

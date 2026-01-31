@@ -1,12 +1,16 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="height: auto; min-height: 100%; overflow-y: auto;">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Inference Logs - RAG Pipeline Monitor</title>
+    <style>
+      html, body { height: auto !important; min-height: 100vh; overflow-y: auto !important; }
+      #root { min-height: 100vh; height: auto; }
+    </style>
   </head>
-  <body>
+  <body style="height: auto; min-height: 100vh; overflow-y: auto;">
     <div id="root"></div>
     <script type="module" src="/src/entries/logs.jsx"></script>
   </body>
