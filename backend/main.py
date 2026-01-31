@@ -45,6 +45,24 @@ import database
 import crud
 from models import MessageRole
 
+# Import Security modules
+from security.security_config import (
+    SECURITY_PREAMBLE,
+    get_hardened_system_prompt,
+    get_banking_security_addendum,
+    REFUSAL_MESSAGES
+)
+from security.query_guardrails import (
+    QueryGuardrails,
+    check_query_safety,
+    SecurityAnalysisResult
+)
+from security.output_filter import (
+    OutputFilter,
+    filter_llm_response,
+    redact_sensitive
+)
+
 app = FastAPI(title="Banking Knowledge Assistant API")
 
 # CORS
@@ -194,9 +212,11 @@ class LLMService:
             enable_cache=True,
             cache_ttl=1800  # 30 minutes
         )
+        # Initialize output filter for response sanitization
+        self.output_filter = OutputFilter(strict_mode=True)
 
     def generate_response(self, system_prompt: str, user_query: str, context: str, model: str = "llama-3.3-70b-versatile") -> str:
-        """Generate LLM response with retry logic and caching"""
+        """Generate LLM response with retry logic, caching, and security filtering"""
         try:
             @self.rate_limiter.with_retry
             def _make_completion(client, messages, model, temperature, max_tokens):
@@ -207,9 +227,12 @@ class LLMService:
                     max_tokens=max_tokens
                 )
             
+            # Redact sensitive data from context before sending to LLM
+            filtered_context = redact_sensitive(context)
+            
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"Context:\n{context}\n\nQuery: {user_query}"}
+                {"role": "user", "content": f"Context:\n{filtered_context}\n\nQuery: {user_query}"}
             ]
             
             chat_completion = _make_completion(
@@ -219,7 +242,16 @@ class LLMService:
                 temperature=0.3,
                 max_tokens=2048
             )
-            return chat_completion.choices[0].message.content
+            
+            raw_response = chat_completion.choices[0].message.content
+            
+            # Apply output filtering to redact any sensitive data in the response
+            filtered_response = self.output_filter.filter_response(raw_response)
+            
+            if filtered_response.redactions_made > 0:
+                logger.info(f"Output filter redacted {filtered_response.redactions_made} sensitive patterns")
+            
+            return filtered_response.response
             
         except Exception as e:
             logger.error(f"LLM Error after retries: {e}")
@@ -395,6 +427,31 @@ async def inference_smart(request: SmartQueryRequest, db: Session = Depends(data
             detail="Smart router not initialized. Please ensure all engines are loaded."
         )
     
+    # ===== SECURITY: Input Query Guardrails =====
+    security_result = check_query_safety(request.query)
+    
+    if security_result.should_block:
+        logger.warning(f"SECURITY: Blocked query with risk score {security_result.risk_score}. "
+                      f"Patterns: {security_result.detected_patterns}")
+        return SmartQueryResponse(
+            results=[],
+            llm_response=security_result.refusal_message,
+            context_used="",
+            routing_decision={
+                "blocked": True,
+                "reason": "security",
+                "risk_score": security_result.risk_score,
+                "risk_categories": [rc.value for rc in security_result.risk_categories]
+            },
+            sources_queried=[]
+        )
+    
+    # Log if query has elevated risk but wasn't blocked
+    if security_result.risk_score > 0.3:
+        logger.info(f"SECURITY: Query passed with elevated risk score {security_result.risk_score}. "
+                   f"Patterns: {security_result.detected_patterns}")
+    # ===== END SECURITY =====
+    
     # Initialize inference logger
     from inference_logger import InferenceLogger
     inference_logger = InferenceLogger(db)
@@ -459,12 +516,25 @@ async def inference_business(request: QueryRequest, db: Session = Depends(databa
     if not business_engine:
         raise HTTPException(status_code=503, detail="Business engine not initialized")
     
+    # ===== SECURITY: Input Query Guardrails =====
+    security_result = check_query_safety(request.query)
+    if security_result.should_block:
+        logger.warning(f"SECURITY: Blocked business query - risk: {security_result.risk_score}")
+        return QueryResponse(
+            results=[],
+            llm_response=security_result.refusal_message,
+            context_used=""
+        )
+    # ===== END SECURITY =====
+    
     results = business_engine.query(request.query, request.top_k, request.rerank)
     context = format_context(results)
     
     llm_response = None
     if llm_service:
-        system_prompt = "You are an expert banking assistant. Answer the user query based strictly on the provided business documentation context. If the provided context contains Mermaid JS diagram code, you MUST include it in your response wrapped in a mermaid code block."
+        # Use hardened system prompt with security preamble
+        base_prompt = "You are an expert banking assistant. Answer the user query based strictly on the provided business documentation context. If the provided context contains Mermaid JS diagram code, you MUST include it in your response wrapped in a mermaid code block."
+        system_prompt = get_hardened_system_prompt(base_prompt, get_banking_security_addendum())
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
     
     # Save to database if conversation_id provided
@@ -485,12 +555,25 @@ async def inference_php(request: QueryRequest, db: Session = Depends(database.ge
     if not php_engine:
         raise HTTPException(status_code=503, detail="PHP engine not initialized")
     
+    # ===== SECURITY: Input Query Guardrails =====
+    security_result = check_query_safety(request.query)
+    if security_result.should_block:
+        logger.warning(f"SECURITY: Blocked PHP query - risk: {security_result.risk_score}")
+        return QueryResponse(
+            results=[],
+            llm_response=security_result.refusal_message,
+            context_used=""
+        )
+    # ===== END SECURITY =====
+    
     results = php_engine.query(request.query, request.top_k)
     context = format_context(results)
     
     llm_response = None
     if llm_service:
-        system_prompt = "You are an expert PHP Laravel developer. Answer the user query based strictly on the provided PHP code context. Do not hallucinate."
+        # Use hardened system prompt with security preamble
+        base_prompt = "You are an expert PHP Laravel developer. Answer the user query based strictly on the provided PHP code context. Do not hallucinate."
+        system_prompt = get_hardened_system_prompt(base_prompt, get_banking_security_addendum())
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
     
     # Save to database if conversation_id provided
@@ -509,12 +592,25 @@ async def inference_js(request: QueryRequest, db: Session = Depends(database.get
     if not js_engine:
         raise HTTPException(status_code=503, detail="JS engine not initialized")
     
+    # ===== SECURITY: Input Query Guardrails =====
+    security_result = check_query_safety(request.query)
+    if security_result.should_block:
+        logger.warning(f"SECURITY: Blocked JS query - risk: {security_result.risk_score}")
+        return QueryResponse(
+            results=[],
+            llm_response=security_result.refusal_message,
+            context_used=""
+        )
+    # ===== END SECURITY =====
+    
     results = js_engine.query(request.query, request.top_k)
     context = format_context(results)
     
     llm_response = None
     if llm_service:
-        system_prompt = "You are an expert JavaScript/React developer. Answer the user query based strictly on the provided JS code context. Do not hallucinate."
+        # Use hardened system prompt with security preamble
+        base_prompt = "You are an expert JavaScript/React developer. Answer the user query based strictly on the provided JS code context. Do not hallucinate."
+        system_prompt = get_hardened_system_prompt(base_prompt, get_banking_security_addendum())
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
     
     # Save to database if conversation_id provided
@@ -532,6 +628,17 @@ async def inference_js(request: QueryRequest, db: Session = Depends(database.get
 async def inference_blade(request: QueryRequest, db: Session = Depends(database.get_db)):
     if not blade_engine:
         raise HTTPException(status_code=503, detail="Blade engine not initialized")
+    
+    # ===== SECURITY: Input Query Guardrails =====
+    security_result = check_query_safety(request.query)
+    if security_result.should_block:
+        logger.warning(f"SECURITY: Blocked Blade query - risk: {security_result.risk_score}")
+        return QueryResponse(
+            results=[],
+            llm_response=security_result.refusal_message,
+            context_used=""
+        )
+    # ===== END SECURITY =====
     
     # Use blade engine's query method with Strategy 2
     blade_results = blade_engine.query(
@@ -551,7 +658,8 @@ async def inference_blade(request: QueryRequest, db: Session = Depends(database.
     
     llm_response = None
     if llm_service:
-        system_prompt = """You are an expert Laravel Blade developer and template analyst.
+        # Use hardened system prompt with security preamble
+        base_prompt = """You are an expert Laravel Blade developer and template analyst.
 Answer the user query based strictly on the provided blade template context.
 Guidelines:
 1. Reference specific files and code sections when relevant
@@ -559,6 +667,7 @@ Guidelines:
 3. Highlight form handling and security features
 4. Be concise but thorough
 5. If context is insufficient, say so"""
+        system_prompt = get_hardened_system_prompt(base_prompt, get_banking_security_addendum())
         llm_response = llm_service.generate_response(system_prompt, request.query, context)
     
     # Save to database if conversation_id provided

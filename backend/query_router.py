@@ -22,6 +22,15 @@ from utils.groq_rate_limiter import GroqRateLimiter
 from utils.bm25_index import BM25IndexManager
 from utils.hybrid_search import HybridSearchManager, HybridSearchConfig, SearchMethod
 
+# Security imports
+from security.security_config import (
+    SECURITY_PREAMBLE, 
+    get_hardened_system_prompt,
+    get_banking_security_addendum
+)
+from security.query_guardrails import QueryGuardrails, check_query_safety
+from security.output_filter import OutputFilter, filter_llm_response, redact_sensitive
+
 logger = logging.getLogger(__name__)
 
 
@@ -1143,31 +1152,41 @@ class UnifiedQueryEngine:
                     context_parts.append(f"    Relevance Score: {r['rrf_score']:.4f}")
                 context_parts.append(f"\n{r['content']}\n")
         
-        return "\n".join(context_parts)
+        # Join context and apply security filtering to redact sensitive data
+        raw_context = "\n".join(context_parts)
+        
+        # Redact any sensitive information from the context before sending to LLM
+        filtered_context = redact_sensitive(raw_context)
+        
+        return filtered_context
     
     def _build_system_prompt(self, 
                             sources: List[KnowledgeSource],
                             intent: IntentClassificationResult) -> str:
-        """Build system prompt based on sources being queried"""
+        """Build system prompt based on sources being queried with security hardening"""
         
-        base_prompt = "You are an expert banking application assistant. "
+        # Base domain prompt
+        domain_prompt = "You are an expert banking application assistant. "
         
         # Code display guidelines
         code_guidelines = "\n\nIMPORTANT: Avoid including code snippets in your response unless the user explicitly asks for code examples, implementation details, or debugging help. Focus on explaining concepts, logic, and behavior in natural language. Only include code when it's essential to answer the question."
         
+        # Build source-specific prompt
         if len(sources) == 1:
             source = sources[0]
             if source == KnowledgeSource.BUSINESS_DOCS:
-                return base_prompt + "Answer based on the provided business documentation. Explain banking concepts, processes, and workflows clearly." + code_guidelines
+                source_prompt = domain_prompt + "Answer based on the provided business documentation. Explain banking concepts, processes, and workflows clearly." + code_guidelines
             elif source == KnowledgeSource.PHP_CODE:
-                return base_prompt + "Answer based on the provided PHP Laravel backend code. Explain implementation details, code structure, and backend logic in descriptive language." + code_guidelines
+                source_prompt = domain_prompt + "Answer based on the provided PHP Laravel backend code. Explain implementation details, code structure, and backend logic in descriptive language." + code_guidelines
             elif source == KnowledgeSource.JS_CODE:
-                return base_prompt + "Answer based on the provided JavaScript/React frontend code. Explain UI components, state management, and frontend behavior conceptually." + code_guidelines
+                source_prompt = domain_prompt + "Answer based on the provided JavaScript/React frontend code. Explain UI components, state management, and frontend behavior conceptually." + code_guidelines
             elif source == KnowledgeSource.BLADE_TEMPLATES:
-                return base_prompt + "Answer based on the provided Blade templates. Explain view structure, forms, and frontend rendering." + code_guidelines
+                source_prompt = domain_prompt + "Answer based on the provided Blade templates. Explain view structure, forms, and frontend rendering." + code_guidelines
+            else:
+                source_prompt = domain_prompt + code_guidelines
         else:
             # Multi-source prompt
-            return base_prompt + """Answer using the provided context from multiple sources:
+            source_prompt = domain_prompt + """Answer using the provided context from multiple sources:
 - Business documentation explains WHAT and WHY (business rules and processes)
 - PHP code shows HOW it's implemented in the backend
 - JavaScript code shows frontend behavior and UI logic
@@ -1184,4 +1203,10 @@ IMPORTANT: Focus on explaining concepts, logic, and behavior rather than display
 
 If the context contains Mermaid diagram code, include it in a mermaid code block."""
         
-        return base_prompt
+        # Apply security hardening with banking-specific rules
+        hardened_prompt = get_hardened_system_prompt(
+            base_prompt=source_prompt,
+            additional_rules=get_banking_security_addendum()
+        )
+        
+        return hardened_prompt
