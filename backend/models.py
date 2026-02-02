@@ -117,6 +117,11 @@ class InferenceLog(Base):
     confidence_threshold = Column(Float, nullable=True)
     min_relevance_score = Column(Float, nullable=True)
     
+    # Query Expansion (BM25 intent-aware expansion)
+    query_expansion_applied = Column(Boolean, default=False)
+    expanded_query = Column(Text, nullable=True)  # Query after BM25 abbreviation expansion
+    expansion_reason = Column(String(200), nullable=True)  # Why expansion was/wasn't applied
+    
     # Routing Decision (for smart router)
     primary_source = Column(String(50), nullable=True)
     secondary_sources = Column(JSON, nullable=True)  # List of secondary sources

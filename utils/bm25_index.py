@@ -33,6 +33,85 @@ class BM25SearchResult:
     rank: int
 
 
+# Banking domain abbreviation expansions
+BANKING_ABBREVIATIONS = {
+    'kyc': 'KYC know your customer',
+    'oao': 'OAO online account opening',
+    'dsa': 'DSA direct selling agent',
+    'td': 'TD term deposit',
+    'fd': 'FD fixed deposit',
+    'npa': 'NPA non performing asset',
+    'uam': 'UAM user access management',
+    'vkyc': 'VKYC video KYC verification',
+    'npc': 'NPC non personal customer',
+    'cif': 'CIF customer information file',
+    'aml': 'AML anti money laundering',
+    'pep': 'PEP politically exposed person',
+    'crf': 'CRF customer request form',
+}
+
+
+def expand_query_abbreviations(query: str) -> str:
+    """
+    Expand banking abbreviations in a query.
+    Uses simple word-based replacement (no regex).
+    
+    Only expands standalone lowercase abbreviations to avoid
+    breaking code identifiers like 'validateKYC' or 'kyc_status'.
+    
+    Args:
+        query: Original query string
+        
+    Returns:
+        Query with abbreviations expanded
+    """
+    words = query.split()
+    result = []
+    
+    for word in words:
+        # Strip punctuation for matching but preserve it
+        stripped = word.lower().strip('.,?!:;"\'')
+        leading = word[:len(word) - len(word.lstrip('.,?!:;"\'' ))]
+        trailing = word[len(word.rstrip('.,?!:;"\'' )):]
+        
+        # Only expand if:
+        # 1. Word is lowercase (not an identifier like KYC or KYCController)
+        # 2. Word matches exactly (not part of compound like kyc_validator)
+        if stripped in BANKING_ABBREVIATIONS and word == word.lower() and '_' not in word:
+            expansion = BANKING_ABBREVIATIONS[stripped]
+            result.append(leading + expansion + trailing)
+        else:
+            result.append(word)
+    
+    return ' '.join(result)
+
+
+def should_expand_query(query_type: str, requires_code: bool) -> bool:
+    """
+    Determine if query expansion is appropriate based on intent classification.
+    
+    Args:
+        query_type: Type from intent classification ('documentation', 'implementation', etc.)
+        requires_code: Whether the query requires code examples
+        
+    Returns:
+        True if query should be expanded, False otherwise
+    """
+    # DON'T expand for code-specific queries
+    if requires_code:
+        return False
+    
+    if query_type in ['implementation', 'debugging']:
+        return False
+    
+    # DO expand for conceptual/documentation queries
+    if query_type in ['documentation', 'architecture']:
+        return True
+    
+    # For 'mixed' type, expand (semantic recall is usually more important)
+    return True
+
+
 class BM25Index:
     """
     BM25 index for a single knowledge source (PHP, JS, Blade, Business Docs)
@@ -214,13 +293,14 @@ class BM25Index:
             logger.error(f"Failed to load BM25 index: {e}")
             return False
     
-    def search(self, query: str, top_k: int = 10) -> List[BM25SearchResult]:
+    def search(self, query: str, top_k: int = 10, expand_abbreviations: bool = False) -> List[BM25SearchResult]:
         """
         Search the BM25 index.
         
         Args:
             query: Search query
             top_k: Number of results to return
+            expand_abbreviations: Whether to expand banking abbreviations in query
             
         Returns:
             List of BM25SearchResult objects
@@ -229,8 +309,15 @@ class BM25Index:
             logger.warning(f"BM25 index not loaded for {self.source_name}")
             return []
         
+        # Optionally expand abbreviations for better recall on conceptual queries
+        search_query = query
+        if expand_abbreviations:
+            search_query = expand_query_abbreviations(query)
+            if search_query != query:
+                logger.info(f"BM25 query expanded: '{query}' → '{search_query}'")
+        
         # Tokenize query
-        query_tokens = self._tokenize(query)
+        query_tokens = self._tokenize(search_query)
         
         if not query_tokens:
             return []
@@ -306,7 +393,8 @@ class BM25IndexManager:
             results[source_name] = index.load()
         return results
     
-    def search(self, source_name: str, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+    def search(self, source_name: str, query: str, top_k: int = 10, 
+                expand_abbreviations: bool = False) -> List[Dict[str, Any]]:
         """
         Search a specific source's BM25 index.
         
@@ -314,6 +402,7 @@ class BM25IndexManager:
             source_name: Name of the knowledge source
             query: Search query
             top_k: Number of results
+            expand_abbreviations: Whether to expand banking abbreviations
             
         Returns:
             List of result dictionaries compatible with dense search results
@@ -324,7 +413,7 @@ class BM25IndexManager:
             logger.warning(f"BM25 index not available for {source_name}")
             return []
         
-        bm25_results = index.search(query, top_k)
+        bm25_results = index.search(query, top_k, expand_abbreviations=expand_abbreviations)
         
         # Convert to format compatible with dense search results
         results = []

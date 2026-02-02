@@ -140,18 +140,18 @@ function ChatApp() {
       console.warn('Cannot load conversation: user not authenticated');
       return;
     }
-    
+
     try {
       const response = await fetch(`http://localhost:8000/api/chat/conversations/${conversationId}`, {
         headers: getAuthHeaders()
       });
-      
+
       if (response.status === 401) {
         console.error('Authentication failed when loading conversation');
         logout();
         return;
       }
-      
+
       if (response.ok) {
         const data = await response.json();
         setCurrentConversationId(conversationId);
@@ -390,7 +390,7 @@ function ChatApp() {
 
                 <div className="space-y-1">
                   <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Capabilities</h3>
-                  <div 
+                  <div
                     onClick={() => setActiveView('code-review')}
                     className={cn(
                       "group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
@@ -405,7 +405,7 @@ function ChatApp() {
                       <motion.div layoutId="active-capability" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
                     )}
                   </div>
-                  <div 
+                  <div
                     onClick={() => setActiveView('chat')}
                     className={cn(
                       "group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
@@ -420,7 +420,7 @@ function ChatApp() {
                       <motion.div layoutId="active-capability" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
                     )}
                   </div>
-                  <div 
+                  <div
                     onClick={() => setActiveView('inference-logs')}
                     className={cn(
                       "group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
@@ -472,25 +472,25 @@ function ChatApp() {
                             )}
                             title={conv.title} // Show full title on hover
                           >
-                          <MessageSquare size={14} className="shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <div className="truncate font-medium">{conv.title}</div>
-                            <div className="text-xs text-gray-400 mt-0.5">
-                              {new Date(conv.updated_at).toLocaleDateString()} • {conv.context_type}
+                            <MessageSquare size={14} className="shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <div className="truncate font-medium">{conv.title}</div>
+                              <div className="text-xs text-gray-400 mt-0.5">
+                                {new Date(conv.updated_at).toLocaleDateString()} • {conv.context_type}
+                              </div>
                             </div>
+                            <span className="text-xs text-gray-400 shrink-0">{conv.message_count || 0}</span>
+                            <button
+                              onClick={(e) => deleteConversation(conv.id, e)}
+                              className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 rounded transition-all shrink-0"
+                              title="Delete conversation"
+                            >
+                              <Trash2 size={12} />
+                            </button>
                           </div>
-                          <span className="text-xs text-gray-400 shrink-0">{conv.message_count || 0}</span>
-                          <button
-                            onClick={(e) => deleteConversation(conv.id, e)}
-                            className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 dark:hover:bg-red-900/30 hover:text-red-600 dark:hover:text-red-400 rounded transition-all shrink-0"
-                            title="Delete conversation"
-                          >
-                            <Trash2 size={12} />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -548,145 +548,145 @@ function ChatApp() {
             </div>
           ) : (
             <>
-          <div className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-6">
-            {messages.map((message) => (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                key={message.id}
-                className={cn(
-                  "flex items-start gap-4 max-w-3xl",
-                  message.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto"
-                )}
-              >
-                <div className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm",
-                  message.role === 'user' ? "bg-primary-600 text-white" : "bg-white text-primary-600 border border-gray-100"
-                )}>
-                  {message.role === 'user' ? <User size={20} /> : <Bot size={20} />}
-                </div>
-
-                <div className={cn(
-                  "p-4 rounded-2xl shadow-sm text-sm leading-relaxed overflow-hidden",
-                  message.role === 'user'
-                    ? "bg-primary-600 text-white rounded-tr-none"
-                    : "bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-100 dark:border-gray-800 rounded-tl-none text-gray-700 dark:text-gray-300"
-                )}>
-                  {message.role === 'user' ? (
-                    <div className="whitespace-pre-wrap">{message.content}</div>
-                  ) : (
-                    <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0.5 text-gray-700 dark:text-gray-300 dark:prose-headings:text-gray-100 dark:prose-strong:text-gray-100 dark:prose-code:text-gray-100 dark:prose-pre:bg-gray-800 dark:prose-pre:border-gray-700">
-                      <ReactMarkdown
-                        components={{
-                          code(props) {
-                            const { children, className, node, ...rest } = props;
-                            const match = /language-(\w+)/.exec(className || '');
-                            if (match && match[1] === 'mermaid') {
-                              return <MermaidDiagram code={String(children).replace(/\n$/, '')} isDarkMode={isDarkMode} />;
-                            }
-                            return (
-                              <code {...rest} className={className}>
-                                {children}
-                              </code>
-                            );
-                          }
-                        }}
-                      >
-                        {message.content}
-                      </ReactMarkdown>
+              <div className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-6">
+                {messages.map((message) => (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    key={message.id}
+                    className={cn(
+                      "flex items-start gap-4 max-w-3xl",
+                      message.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto"
+                    )}
+                  >
+                    <div className={cn(
+                      "w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm",
+                      message.role === 'user' ? "bg-primary-600 text-white" : "bg-white text-primary-600 border border-gray-100"
+                    )}>
+                      {message.role === 'user' ? <User size={20} /> : <Bot size={20} />}
                     </div>
-                  )}
 
-                  {message.context_used && (
-                    <div className="mt-4 pt-4 border-t border-gray-200/50 dark:border-gray-700/50">
-                      <details className="text-xs text-gray-500 dark:text-gray-400 cursor-pointer">
-                        <summary className="hover:text-primary-600 dark:hover:text-primary-400 font-medium">View Source Context</summary>
-                        <div className="mt-2 p-2 bg-gray-50 dark:bg-gray-800 rounded border border-gray-100 dark:border-gray-700 font-mono text-[10px] overflow-x-auto max-h-60">
-                          <div className="prose prose-xs max-w-none">
-                            <ReactMarkdown
-                              components={{
-                                code(props) {
-                                  const { children, className, node, ...rest } = props;
-                                  const match = /language-(\w+)/.exec(className || '');
-                                  if (match && match[1] === 'mermaid') {
-                                    return <MermaidDiagram code={String(children).replace(/\n$/, '')} />;
-                                  }
-                                  return (
-                                    <code {...rest} className={className}>
-                                      {children}
-                                    </code>
-                                  );
+                    <div className={cn(
+                      "p-4 rounded-2xl shadow-sm text-sm leading-relaxed overflow-hidden",
+                      message.role === 'user'
+                        ? "bg-primary-600 text-white rounded-tr-none"
+                        : "bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-100 dark:border-gray-800 rounded-tl-none text-gray-700 dark:text-gray-300"
+                    )}>
+                      {message.role === 'user' ? (
+                        <div className="whitespace-pre-wrap">{message.content}</div>
+                      ) : (
+                        <div className="prose prose-sm max-w-none prose-p:my-1 prose-headings:my-2 prose-ul:my-1 prose-li:my-0.5 text-gray-700 dark:text-gray-300 dark:prose-headings:text-gray-100 dark:prose-strong:text-gray-100 dark:prose-code:text-gray-100 dark:prose-pre:bg-gray-800 dark:prose-pre:border-gray-700">
+                          <ReactMarkdown
+                            components={{
+                              code(props) {
+                                const { children, className, node, ...rest } = props;
+                                const match = /language-(\w+)/.exec(className || '');
+                                if (match && match[1] === 'mermaid') {
+                                  return <MermaidDiagram code={String(children).replace(/\n$/, '')} isDarkMode={isDarkMode} />;
                                 }
-                              }}
-                            >
-                              {message.context_used}
-                            </ReactMarkdown>
+                                return (
+                                  <code {...rest} className={className}>
+                                    {children}
+                                  </code>
+                                );
+                              }
+                            }}
+                          >
+                            {message.content}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+
+                      {message.context_used && (
+                        <div className="mt-4 pt-4 border-t border-gray-200/50 dark:border-gray-600/50">
+                          <details className="text-xs text-gray-600 dark:text-gray-300 cursor-pointer">
+                            <summary className="hover:text-primary-600 dark:hover:text-primary-400 font-medium">View Source Context</summary>
+                            <div className="mt-2 p-3 bg-gray-50 dark:bg-gray-700/80 rounded-lg border border-gray-200 dark:border-gray-600 font-mono text-[11px] overflow-x-auto max-h-72 text-gray-700 dark:text-gray-100">
+                              <div className="prose prose-xs max-w-none dark:prose-invert">
+                                <ReactMarkdown
+                                  components={{
+                                    code(props) {
+                                      const { children, className, node, ...rest } = props;
+                                      const match = /language-(\w+)/.exec(className || '');
+                                      if (match && match[1] === 'mermaid') {
+                                        return <MermaidDiagram code={String(children).replace(/\n$/, '')} />;
+                                      }
+                                      return (
+                                        <code {...rest} className={className}>
+                                          {children}
+                                        </code>
+                                      );
+                                    }
+                                  }}
+                                >
+                                  {message.context_used}
+                                </ReactMarkdown>
+                              </div>
+                            </div>
+                          </details>
+                        </div>
+                      )}
+
+                      {message.routing_info && (
+                        <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg text-xs">
+                          <div className="font-semibold text-blue-700 dark:text-blue-300 mb-1">🧠 Smart Routing</div>
+                          <div className="text-blue-600 dark:text-blue-400 space-y-1">
+                            <div><span className="font-medium">Primary:</span> {message.routing_info.primary_source}</div>
+                            {message.routing_info.secondary_sources?.length > 0 && (
+                              <div><span className="font-medium">Also searched:</span> {message.routing_info.secondary_sources.join(', ')}</div>
+                            )}
+                            <div><span className="font-medium">Confidence:</span> {(message.routing_info.confidence * 100).toFixed(0)}%</div>
+                            <div><span className="font-medium">Reason:</span> {message.routing_info.reasoning}</div>
                           </div>
                         </div>
-                      </details>
+                      )}
                     </div>
-                  )}
+                  </motion.div>
+                ))}
 
-                  {message.routing_info && (
-                    <div className="mt-3 p-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800 rounded-lg text-xs">
-                      <div className="font-semibold text-blue-700 dark:text-blue-300 mb-1">🧠 Smart Routing</div>
-                      <div className="text-blue-600 dark:text-blue-400 space-y-1">
-                        <div><span className="font-medium">Primary:</span> {message.routing_info.primary_source}</div>
-                        {message.routing_info.secondary_sources?.length > 0 && (
-                          <div><span className="font-medium">Also searched:</span> {message.routing_info.secondary_sources.join(', ')}</div>
-                        )}
-                        <div><span className="font-medium">Confidence:</span> {(message.routing_info.confidence * 100).toFixed(0)}%</div>
-                        <div><span className="font-medium">Reason:</span> {message.routing_info.reasoning}</div>
+                {isLoading && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-4 max-w-3xl mr-auto">
+                    <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-900 text-primary-600 border border-gray-100 dark:border-gray-800 flex items-center justify-center shrink-0 shadow-sm">
+                      <Bot size={20} />
+                    </div>
+                    <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-100 dark:border-gray-800 p-4 rounded-2xl rounded-tl-none">
+                      <div className="flex gap-1">
+                        <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                       </div>
                     </div>
-                  )}
-                </div>
-              </motion.div>
-            ))}
+                  </motion.div>
+                )}
 
-            {isLoading && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-4 max-w-3xl mr-auto">
-                <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-900 text-primary-600 border border-gray-100 dark:border-gray-800 flex items-center justify-center shrink-0 shadow-sm">
-                  <Bot size={20} />
-                </div>
-                <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-100 dark:border-gray-800 p-4 rounded-2xl rounded-tl-none">
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                <div className="h-4" />
+                <div ref={messagesEndRef} />
+              </div>
+
+              <div className="p-4 lg:p-8 bg-gradient-to-t from-white via-white/80 to-transparent dark:from-gray-950 dark:via-gray-950/80">
+                <div className="max-w-4xl mx-auto relative group">
+                  <div className="absolute -inset-1 bg-gradient-to-r from-primary-400 to-primary-600 rounded-xl blur opacity-20 group-hover:opacity-30 transition duration-1000 group-hover:duration-200" />
+                  <form onSubmit={handleSendMessage} className="relative flex items-center gap-2 bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-100 dark:border-gray-800 p-2">
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      placeholder={`Ask about ${contexts.find(c => c.id === selectedContext)?.label}...`}
+                      className="flex-1 px-4 py-2 bg-transparent text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none"
+                    />
+                    <button
+                      type="submit"
+                      disabled={isLoading}
+                      className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-md transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:transform-none"
+                    >
+                      <Send size={20} />
+                    </button>
+                  </form>
+                  <div className="text-center mt-2 text-xs text-gray-400">
+                    AI-generated responses may require verification.
                   </div>
                 </div>
-              </motion.div>
-            )}
-
-            <div className="h-4" />
-            <div ref={messagesEndRef} />
-          </div>
-
-          <div className="p-4 lg:p-8 bg-gradient-to-t from-white via-white/80 to-transparent dark:from-gray-950 dark:via-gray-950/80">
-            <div className="max-w-4xl mx-auto relative group">
-              <div className="absolute -inset-1 bg-gradient-to-r from-primary-400 to-primary-600 rounded-xl blur opacity-20 group-hover:opacity-30 transition duration-1000 group-hover:duration-200" />
-              <form onSubmit={handleSendMessage} className="relative flex items-center gap-2 bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-100 dark:border-gray-800 p-2">
-                <input
-                  type="text"
-                  value={inputValue}
-                  onChange={(e) => setInputValue(e.target.value)}
-                  placeholder={`Ask about ${contexts.find(c => c.id === selectedContext)?.label}...`}
-                  className="flex-1 px-4 py-2 bg-transparent text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none"
-                />
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-md transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:transform-none"
-                >
-                  <Send size={20} />
-                </button>
-              </form>
-              <div className="text-center mt-2 text-xs text-gray-400">
-                AI-generated responses may require verification.
               </div>
-            </div>
-          </div>
             </>
           )}
         </main>

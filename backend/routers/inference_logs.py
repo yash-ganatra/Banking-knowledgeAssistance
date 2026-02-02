@@ -64,6 +64,11 @@ class InferenceLogResponse(BaseModel):
     confidence_threshold: Optional[float]
     min_relevance_score: Optional[float]
     
+    # Query expansion (BM25)
+    query_expansion_applied: Optional[bool] = None
+    expanded_query: Optional[str] = None
+    expansion_reason: Optional[str] = None
+    
     # Routing
     primary_source: Optional[str]
     secondary_sources: Optional[List[str]]

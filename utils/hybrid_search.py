@@ -3,11 +3,12 @@ Hybrid Search Manager
 
 Combines dense (vector) search with sparse (BM25) search for improved retrieval accuracy.
 Uses Reciprocal Rank Fusion (RRF) to merge results from both search methods.
+Supports intent-aware query expansion for better recall on conceptual queries.
 """
 
 import logging
 from typing import List, Dict, Any, Optional, Tuple
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -29,6 +30,49 @@ class HybridSearchConfig:
     dense_top_k_multiplier: float = 2.0  # Retrieve more candidates from dense
     sparse_top_k_multiplier: float = 2.0  # Retrieve more candidates from sparse
     min_bm25_score: float = 0.5  # Minimum BM25 score to include
+    enable_query_expansion: bool = True  # Enable intent-aware query expansion
+
+
+@dataclass
+class QueryExpansionInfo:
+    """
+    Information about query expansion that occurred during search.
+    Used for logging and debugging.
+    """
+    original_query: str
+    expanded_query: str
+    was_expanded: bool
+    query_type: str
+    requires_code: bool
+    source_name: str = ""
+
+
+@dataclass
+class QueryIntent:
+    """
+    Lightweight intent info passed to hybrid search.
+    Mirrors relevant fields from IntentClassificationResult.
+    """
+    query_type: str = "mixed"  # documentation, implementation, debugging, architecture, mixed
+    requires_code: bool = False
+    
+    @classmethod
+    def from_classification(cls, intent_result) -> 'QueryIntent':
+        """Create from IntentClassificationResult"""
+        return cls(
+            query_type=intent_result.query_type.value if hasattr(intent_result.query_type, 'value') else str(intent_result.query_type),
+            requires_code=intent_result.requires_code
+        )
+    
+    @classmethod
+    def for_code_query(cls) -> 'QueryIntent':
+        """Create intent for code-specific queries (no expansion)"""
+        return cls(query_type="implementation", requires_code=True)
+    
+    @classmethod
+    def for_documentation_query(cls) -> 'QueryIntent':
+        """Create intent for documentation queries (with expansion)"""
+        return cls(query_type="documentation", requires_code=False)
 
 
 class HybridSearchFusion:
@@ -200,8 +244,9 @@ class HybridSearchManager:
         query: str,
         dense_results: List[Dict[str, Any]],
         top_k: int = 10,
-        method: SearchMethod = SearchMethod.HYBRID
-    ) -> List[Dict[str, Any]]:
+        method: SearchMethod = SearchMethod.HYBRID,
+        query_intent: Optional[QueryIntent] = None
+    ) -> Tuple[List[Dict[str, Any]], Optional[QueryExpansionInfo]]:
         """
         Perform hybrid search combining dense and sparse results.
         
@@ -211,24 +256,67 @@ class HybridSearchManager:
             dense_results: Results from dense (vector) search
             top_k: Number of final results
             method: Search method to use
+            query_intent: Optional intent info to control query expansion
             
         Returns:
-            Merged search results
+            Tuple of (merged search results, expansion info if applicable)
         """
         if method == SearchMethod.DENSE:
-            return dense_results[:top_k]
+            return dense_results[:top_k], None
         
-        # Get sparse (BM25) results
+        # Determine if we should expand abbreviations based on intent
+        expand_abbreviations = False
+        expansion_info = None
+        
+        if self.config.enable_query_expansion and query_intent is not None:
+            # Import here to avoid circular imports
+            from utils.bm25_index import should_expand_query, expand_query_abbreviations
+            expand_abbreviations = should_expand_query(
+                query_type=query_intent.query_type,
+                requires_code=query_intent.requires_code
+            )
+            
+            # Create expansion info for logging
+            if expand_abbreviations:
+                expanded_query = expand_query_abbreviations(query)
+                was_actually_expanded = expanded_query != query
+                expansion_info = QueryExpansionInfo(
+                    original_query=query,
+                    expanded_query=expanded_query,
+                    was_expanded=was_actually_expanded,
+                    query_type=query_intent.query_type,
+                    requires_code=query_intent.requires_code,
+                    source_name=source_name
+                )
+                if was_actually_expanded:
+                    logger.info(f"Query expanded for {source_name}: '{query}' → '{expanded_query}'")
+                else:
+                    logger.info(f"Query expansion enabled for {source_name} but no abbreviations found")
+            else:
+                expansion_info = QueryExpansionInfo(
+                    original_query=query,
+                    expanded_query=query,
+                    was_expanded=False,
+                    query_type=query_intent.query_type,
+                    requires_code=query_intent.requires_code,
+                    source_name=source_name
+                )
+                logger.info(f"Query expansion skipped for {source_name} (code-specific: type={query_intent.query_type}, requires_code={query_intent.requires_code})")
+        
+        # Get sparse (BM25) results with optional expansion
         sparse_top_k = int(top_k * self.config.sparse_top_k_multiplier)
-        sparse_results = self.bm25_manager.search(source_name, query, sparse_top_k)
+        sparse_results = self.bm25_manager.search(
+            source_name, query, sparse_top_k, 
+            expand_abbreviations=expand_abbreviations
+        )
         
         if method == SearchMethod.SPARSE:
-            return sparse_results[:top_k]
+            return sparse_results[:top_k], expansion_info
         
         # Hybrid: Fuse dense and sparse results
         if not sparse_results:
             logger.warning(f"No BM25 results for {source_name}, falling back to dense only")
-            return dense_results[:top_k]
+            return dense_results[:top_k], expansion_info
         
         merged = self.fusion.reciprocal_rank_fusion(
             dense_results=dense_results,
@@ -236,14 +324,15 @@ class HybridSearchManager:
             top_k=top_k
         )
         
-        return merged
+        return merged, expansion_info
     
     def search_multi_source(
         self,
         results_by_source: Dict[str, List[Dict[str, Any]]],
         query: str,
-        top_k: int = 10
-    ) -> Dict[str, List[Dict[str, Any]]]:
+        top_k: int = 10,
+        query_intent: Optional[QueryIntent] = None
+    ) -> Tuple[Dict[str, List[Dict[str, Any]]], Optional[QueryExpansionInfo]]:
         """
         Apply hybrid search to multiple sources.
         
@@ -251,21 +340,29 @@ class HybridSearchManager:
             results_by_source: Dense results organized by source
             query: Search query
             top_k: Results per source
+            query_intent: Optional intent info to control query expansion
             
         Returns:
-            Hybrid results organized by source
+            Tuple of (hybrid results organized by source, first expansion info)
         """
         hybrid_results = {}
+        first_expansion_info = None
         
         for source_name, dense_results in results_by_source.items():
-            hybrid_results[source_name] = self.search(
+            results, expansion_info = self.search(
                 source_name=source_name,
                 query=query,
                 dense_results=dense_results,
-                top_k=top_k
+                top_k=top_k,
+                query_intent=query_intent
             )
+            hybrid_results[source_name] = results
+            
+            # Keep the first expansion info (they should all be the same)
+            if first_expansion_info is None and expansion_info is not None:
+                first_expansion_info = expansion_info
         
-        return hybrid_results
+        return hybrid_results, first_expansion_info
     
     def is_available(self, source_name: str) -> bool:
         """Check if hybrid search is available for a source"""

@@ -258,12 +258,7 @@ class OutputFilter:
         
         if dangerous_code_detected:
             logger.warning(f"Dangerous code patterns detected: {dangerous_patterns_found}")
-            # In strict mode, add a warning to the response
-            if self.strict_mode:
-                warning = "\n\n⚠️ **Security Notice**: This response may contain code patterns that could be misused. Please use responsibly and only for legitimate purposes.\n"
-                # Don't add warning if it would be excessive
-                if len(filtered) > 100:
-                    filtered = filtered + warning
+            # Pattern detection is logged but no warning is appended to user responses
         
         # Log if significant redactions were made
         if redactions_made > 0:

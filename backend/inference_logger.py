@@ -57,6 +57,11 @@ class InferenceLogEntry:
     confidence_threshold: Optional[float] = None
     min_relevance_score: Optional[float] = None
     
+    # Query Expansion (BM25)
+    query_expansion_applied: bool = False
+    expanded_query: Optional[str] = None
+    expansion_reason: Optional[str] = None  # e.g., "documentation query, requires_code=False"
+    
     # Routing
     primary_source: Optional[str] = None
     secondary_sources: List[str] = field(default_factory=list)
@@ -162,6 +167,44 @@ class InferenceLogger:
         """Log query after preprocessing (abbreviation expansion, etc.)"""
         if self.current_log:
             self.current_log.processed_query = processed_query
+    
+    def log_query_expansion(
+        self,
+        original_query: str,
+        expanded_query: str,
+        was_expanded: bool,
+        query_type: str,
+        requires_code: bool
+    ) -> None:
+        """
+        Log query expansion decision and result.
+        
+        Args:
+            original_query: The original user query
+            expanded_query: The query after expansion (may be same as original)
+            was_expanded: Whether expansion was actually applied
+            query_type: Intent classification query type
+            requires_code: Whether the query requires code
+        """
+        if not self.current_log:
+            return
+        
+        self.current_log.query_expansion_applied = was_expanded
+        
+        if was_expanded:
+            self.current_log.expanded_query = expanded_query
+            self.current_log.expansion_reason = f"query_type={query_type}, requires_code={requires_code}"
+            logger.info(
+                f"Query expansion applied: '{original_query}' → '{expanded_query}' "
+                f"(reason: {self.current_log.expansion_reason})"
+            )
+        else:
+            self.current_log.expanded_query = None
+            self.current_log.expansion_reason = f"Skipped: query_type={query_type}, requires_code={requires_code}"
+            logger.info(
+                f"Query expansion skipped for: '{original_query}' "
+                f"(reason: code-specific query, type={query_type}, requires_code={requires_code})"
+            )
     
     def log_routing_decision(
         self,
@@ -382,6 +425,11 @@ class InferenceLogger:
                 top_k=log_entry.top_k,
                 confidence_threshold=log_entry.confidence_threshold,
                 min_relevance_score=log_entry.min_relevance_score,
+                # Query expansion fields
+                query_expansion_applied=log_entry.query_expansion_applied,
+                expanded_query=log_entry.expanded_query,
+                expansion_reason=log_entry.expansion_reason,
+                # Routing fields
                 primary_source=log_entry.primary_source,
                 secondary_sources=log_entry.secondary_sources,
                 routing_confidence=log_entry.routing_confidence,

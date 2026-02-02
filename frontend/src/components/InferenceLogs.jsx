@@ -192,6 +192,30 @@ const LogRow = ({ log, onViewDetails }) => {
               </div>
             </div>
           </div>
+          {/* Query Expansion Info */}
+          {log.query_expansion_applied !== null && log.query_expansion_applied !== undefined && (
+            <div className="mt-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-gray-400 text-xs font-medium">Query Expansion (BM25)</span>
+                <span className={`px-2 py-0.5 rounded text-xs ${log.query_expansion_applied ? 'bg-green-500/20 text-green-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                  {log.query_expansion_applied ? 'Applied' : 'Skipped'}
+                </span>
+              </div>
+              {log.query_expansion_applied && log.expanded_query && (
+                <div className="mt-2">
+                  <div className="text-gray-500 text-xs mb-1">Expanded Query</div>
+                  <div className="text-cyan-300 text-sm bg-gray-900 p-2 rounded font-mono">
+                    {log.expanded_query}
+                  </div>
+                </div>
+              )}
+              {log.expansion_reason && (
+                <div className="mt-2 text-xs text-gray-500">
+                  Reason: {log.expansion_reason}
+                </div>
+              )}
+            </div>
+          )}
           {log.routing_reasoning && (
             <div className="mt-4">
               <div className="text-gray-500 text-xs mb-1">Routing Reasoning</div>

@@ -20,7 +20,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.groq_rate_limiter import GroqRateLimiter
 from utils.bm25_index import BM25IndexManager
-from utils.hybrid_search import HybridSearchManager, HybridSearchConfig, SearchMethod
+from utils.hybrid_search import HybridSearchManager, HybridSearchConfig, SearchMethod, QueryIntent, QueryExpansionInfo
 
 # Security imports
 from security.security_config import (
@@ -744,7 +744,9 @@ class QueryRouter:
     async def query_parallel(self, 
                             sources: List[KnowledgeSource],
                             query: str,
-                            top_k: int = 5) -> Dict[str, List[Dict]]:
+                            top_k: int = 5,
+                            query_intent: Optional[QueryIntent] = None,
+                            inference_logger = None) -> Tuple[Dict[str, List[Dict]], Optional[QueryExpansionInfo]]:
         """
         Query multiple engines in parallel
         
@@ -752,9 +754,11 @@ class QueryRouter:
             sources: List of knowledge sources to query
             query: User query text
             top_k: Number of results per source
+            query_intent: Optional intent info for controlling query expansion
+            inference_logger: Optional logger for tracking expansion
             
         Returns:
-            Dict mapping source name to results
+            Tuple of (Dict mapping source name to results, expansion info)
         """
         # Create parallel query tasks
         tasks = [
@@ -770,21 +774,34 @@ class QueryRouter:
                             for source_name, source_results in results}
         
         # Apply hybrid search (combine with BM25) if enabled
+        expansion_info = None
         if self.use_hybrid_search and self.hybrid_manager:
-            results_by_source = self.hybrid_manager.search_multi_source(
+            results_by_source, expansion_info = self.hybrid_manager.search_multi_source(
                 results_by_source=results_by_source,
                 query=query,
-                top_k=top_k
+                top_k=top_k,
+                query_intent=query_intent  # Pass intent for smart expansion
             )
             logger.info(f"Hybrid search applied to {len(results_by_source)} sources")
+            
+            # Log expansion info if logger provided
+            if inference_logger and expansion_info:
+                inference_logger.log_query_expansion(
+                    original_query=expansion_info.original_query,
+                    expanded_query=expansion_info.expanded_query,
+                    was_expanded=expansion_info.was_expanded,
+                    query_type=expansion_info.query_type,
+                    requires_code=expansion_info.requires_code
+                )
         
-        return results_by_source
+        return results_by_source, expansion_info
     
     async def query_multi_source(self,
                           sources: List[KnowledgeSource],
                           query: str,
                           top_k: int = 5,
-                          final_top_k: Optional[int] = None) -> List[Dict]:
+                          final_top_k: Optional[int] = None,
+                          query_intent: Optional[QueryIntent] = None) -> List[Dict]:
         """
         Query multiple sources and merge results using RRF
         
@@ -793,6 +810,7 @@ class QueryRouter:
             query: User query text
             top_k: Number of results to get from each source
             final_top_k: Final number of merged results (defaults to top_k)
+            query_intent: Optional intent info for controlling query expansion
             
         Returns:
             Merged and ranked results using RRF
@@ -802,7 +820,7 @@ class QueryRouter:
         
         # Run parallel queries - get more candidates for reranking
         retrieve_k = top_k * 2  # Get 2x candidates for better reranking
-        results_by_source = await self.query_parallel(sources, query, retrieve_k)
+        results_by_source, _ = await self.query_parallel(sources, query, retrieve_k, query_intent=query_intent)
         
         # Apply RRF to merge results with quality filtering
         merged_results = self.result_fusion.reciprocal_rank_fusion(
@@ -827,7 +845,8 @@ class QueryRouter:
                           top_k: int = 5,
                           final_top_k: Optional[int] = None,
                           min_relevance_score: float = 2.0,
-                          inference_logger = None) -> List[Dict]:
+                          inference_logger = None,
+                          query_intent: Optional[QueryIntent] = None) -> List[Dict]:
         """
         Query multiple sources with configurable relevance filtering
         
@@ -838,6 +857,7 @@ class QueryRouter:
             final_top_k: Final number of merged results (defaults to top_k)
             min_relevance_score: Minimum cross-encoder score to include
             inference_logger: Optional logger for tracking
+            query_intent: Optional intent info for controlling query expansion
             
         Returns:
             Merged, filtered and ranked results
@@ -848,7 +868,11 @@ class QueryRouter:
         # Run parallel queries - get more candidates for reranking
         retrieve_k = top_k * 2
         retrieval_start = time.time()
-        results_by_source = await self.query_parallel(sources, query, retrieve_k)
+        results_by_source, _ = await self.query_parallel(
+            sources, query, retrieve_k, 
+            query_intent=query_intent,
+            inference_logger=inference_logger  # Pass logger for expansion tracking
+        )
         retrieval_time_ms = (time.time() - retrieval_start) * 1000
         
         # Log initial retrieval for each source
@@ -914,7 +938,8 @@ class QueryRouter:
                            source: KnowledgeSource,
                            query: str,
                            top_k: int = 5,
-                           inference_logger = None) -> List[Dict]:
+                           inference_logger = None,
+                           query_intent: Optional[QueryIntent] = None) -> List[Dict]:
         """
         Query a single source directly (no RRF needed)
         
@@ -923,12 +948,17 @@ class QueryRouter:
             query: User query text
             top_k: Number of results
             inference_logger: Optional logger for tracking
+            query_intent: Optional intent info for controlling query expansion
             
         Returns:
             Results from the source
         """
         retrieval_start = time.time()
-        results_by_source = await self.query_parallel([source], query, top_k)
+        results_by_source, _ = await self.query_parallel(
+            [source], query, top_k, 
+            query_intent=query_intent,
+            inference_logger=inference_logger  # Pass logger for expansion tracking
+        )
         retrieval_time_ms = (time.time() - retrieval_start) * 1000
         
         results = results_by_source.get(source.value, [])
@@ -966,33 +996,25 @@ class UnifiedQueryEngine:
     
     def preprocess_query(self, query: str) -> str:
         """
-        Preprocess query for better retrieval
+        Preprocess query for better retrieval.
+        
+        Note: Banking abbreviation expansion is now handled by intent-aware
+        BM25 search (see utils/bm25_index.py). This method only handles
+        basic normalization to avoid double expansion.
         
         Args:
             query: Raw user query
             
         Returns:
-            Preprocessed query
+            Preprocessed query (normalized whitespace only)
         """
-        # Remove extra whitespace
+        # Remove extra whitespace - this is safe for all query types
         query = ' '.join(query.split())
         
-        # Expand common abbreviations in banking domain
-        abbreviations = {
-            'kyc': 'KYC know your customer',
-            'dsa': 'DSA direct selling agent',
-            'oao': 'OAO online account opening',
-            'td': 'term deposit',
-            'fd': 'fixed deposit',
-            'npc': 'NPC non-personal customer',
-            'uam': 'UAM user access management',
-            'vkyc': 'video KYC verification'
-        }
-        
-        query_lower = query.lower()
-        for abbr, expansion in abbreviations.items():
-            if abbr in query_lower.split():
-                query = query.replace(abbr, expansion)
+        # NOTE: Abbreviation expansion has been moved to intent-aware BM25 search.
+        # This ensures code queries like "validateKYC" are not expanded,
+        # while conceptual queries like "what is kyc" get proper expansion.
+        # See: utils/bm25_index.py - expand_query_abbreviations()
         
         return query
     
@@ -1068,7 +1090,12 @@ class UnifiedQueryEngine:
             )
             inference_logger.log_sources_queried([s.value for s in sources_to_query])
         
-        # Step 3: Query appropriate sources (use processed query for retrieval)
+        # Step 3: Create QueryIntent for smart query expansion decisions
+        # This passes the LLM's understanding of query type to BM25 search
+        query_intent = QueryIntent.from_classification(intent)
+        logger.info(f"QueryIntent: type={query_intent.query_type}, requires_code={query_intent.requires_code}")
+        
+        # Step 4: Query appropriate sources (use processed query for retrieval)
         retrieval_start = time.time()
         if len(sources_to_query) == 1:
             # Single source - direct query (no aggressive filtering needed)
@@ -1076,7 +1103,8 @@ class UnifiedQueryEngine:
                 sources_to_query[0],
                 processed_query,
                 top_k,
-                inference_logger=inference_logger
+                inference_logger=inference_logger,
+                query_intent=query_intent  # Pass intent for smart BM25 expansion
             )
         else:
             # Multi-source - use stricter filtering to remove irrelevant chunks
@@ -1086,7 +1114,8 @@ class UnifiedQueryEngine:
                 top_k=top_k,
                 final_top_k=top_k,
                 min_relevance_score=min_relevance_score,
-                inference_logger=inference_logger
+                inference_logger=inference_logger,
+                query_intent=query_intent  # Pass intent for smart BM25 expansion
             )
         retrieval_time_ms = (time.time() - retrieval_start) * 1000
         
