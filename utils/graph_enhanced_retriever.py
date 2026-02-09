@@ -1,0 +1,562 @@
+"""
+Graph-Enhanced Retriever
+
+Integrates Neo4j graph context with ChromaDB vector retrieval.
+Enhances retrieved chunks by adding related entities discovered through
+graph traversal, providing the LLM with a "high-level map" of code relationships.
+
+Key Features:
+- Entity extraction from retrieved chunks (function names, class names)
+- Graph traversal to find related entities
+- RRF-based merging of vector results with graph context
+- Configurable graph enhancement for different query types
+"""
+
+import logging
+import re
+from typing import Dict, List, Optional, Any, Tuple, Set
+from dataclasses import dataclass
+from enum import Enum
+
+logger = logging.getLogger(__name__)
+
+
+class GraphEnhancementMode(Enum):
+    """When to apply graph enhancement"""
+    ALWAYS = "always"
+    CODE_QUERIES_ONLY = "code_queries_only"
+    FLOW_QUERIES_ONLY = "flow_queries_only"
+    DISABLED = "disabled"
+
+
+@dataclass
+class GraphContext:
+    """Context extracted from the knowledge graph"""
+    related_entities: List[Dict[str, Any]]
+    call_graph: List[Dict[str, Any]]  # Functions that call/are called by retrieved chunks
+    route_flow: Optional[Dict[str, Any]]  # Route → Controller → Action flow if applicable
+    traversal_depth: int
+    query_time_ms: float
+    
+    def to_context_string(self) -> str:
+        """
+        Format graph context as a string for LLM prompt.
+        
+        Returns:
+            Formatted context string showing relationships
+        """
+        if not self.related_entities and not self.call_graph:
+            return ""
+        
+        parts = []
+        
+        if self.call_graph:
+            parts.append("### Related Code Flow:")
+            for item in self.call_graph[:5]:  # Limit to 5 items
+                entity_type = item.get("type", "Entity")
+                name = item.get("name", "Unknown")
+                file_path = item.get("file", "")
+                parts.append(f"- {entity_type}: `{name}` ({file_path})")
+        
+        if self.route_flow:
+            parts.append("\n### Request Flow:")
+            route = self.route_flow.get("route", {})
+            controller = self.route_flow.get("controller", {})
+            action = self.route_flow.get("action", {})
+            models = self.route_flow.get("models", [])
+            
+            if route:
+                parts.append(f"- Route: `{route.get('method', 'GET')} {route.get('uri', '')}`")
+            if controller and action:
+                parts.append(f"- Handler: `{controller.get('name', '')}@{action.get('name', '')}`")
+            if models:
+                parts.append(f"- Models: {', '.join(f'`{m.get(\"name\", \"\")}`' for m in models[:3])}")
+        
+        if self.related_entities:
+            # Group by type
+            by_type: Dict[str, List[str]] = {}
+            for entity in self.related_entities[:10]:  # Limit
+                entity_type = entity.get("type", entity.get("labels", ["Entity"])[0] if isinstance(entity.get("labels"), list) else "Entity")
+                name = entity.get("name", "Unknown")
+                if entity_type not in by_type:
+                    by_type[entity_type] = []
+                by_type[entity_type].append(name)
+            
+            parts.append("\n### Related Entities:")
+            for entity_type, names in by_type.items():
+                parts.append(f"- {entity_type}s: {', '.join(f'`{n}`' for n in names[:5])}")
+        
+        return "\n".join(parts) if parts else ""
+
+
+@dataclass
+class GraphEnhancementConfig:
+    """Configuration for graph enhancement"""
+    max_traversal_depth: int = 2
+    max_related_entities: int = 10
+    rrf_graph_weight: float = 0.3  # Weight for graph-discovered entities in RRF
+    entity_extraction_patterns: List[str] = None  # Regex patterns for entity extraction
+    
+    def __post_init__(self):
+        if self.entity_extraction_patterns is None:
+            # Default patterns for PHP/Laravel code
+            self.entity_extraction_patterns = [
+                r'class\s+(\w+)',  # Class definitions
+                r'function\s+(\w+)',  # Function definitions
+                r'(\w+)Controller',  # Controller references
+                r'(\w+)::(\w+)',  # Static method calls (Model::method)
+                r"view\s*\(\s*['\"]([^'\"]+)['\"]",  # view() calls
+                r'route\s*\(\s*[\'"]([^\'"]+)[\'"]',  # route() calls
+            ]
+
+
+class GraphEnhancedRetriever:
+    """
+    Enhances vector retrieval with graph context.
+    
+    Workflow:
+    1. Receive initial vector search results
+    2. Extract entity names from result content/metadata
+    3. Query graph for related entities
+    4. Optionally fetch vector embeddings for discovered entities
+    5. Merge results using RRF with graph context bonus
+    
+    Usage:
+        retriever = GraphEnhancedRetriever(neo4j_uri="bolt://localhost:7687")
+        enhanced_results = await retriever.enhance_results(
+            query="How does loan approval work?",
+            results=vector_results,
+            max_graph_depth=2
+        )
+    """
+    
+    def __init__(
+        self,
+        neo4j_uri: Optional[str] = None,
+        config: Optional[GraphEnhancementConfig] = None,
+        mode: GraphEnhancementMode = GraphEnhancementMode.CODE_QUERIES_ONLY
+    ):
+        """
+        Initialize the graph-enhanced retriever.
+        
+        Args:
+            neo4j_uri: Neo4j bolt URI (defaults to env var NEO4J_URI)
+            config: Enhancement configuration
+            mode: When to apply graph enhancement
+        """
+        self.config = config or GraphEnhancementConfig()
+        self.mode = mode
+        self.connection = None
+        self.query_builder = None
+        self._init_attempted = False
+        self._neo4j_uri = neo4j_uri
+        
+        # Compile entity extraction patterns
+        self._entity_patterns = [
+            re.compile(p, re.MULTILINE) for p in self.config.entity_extraction_patterns
+        ]
+    
+    def _ensure_connection(self) -> bool:
+        """
+        Lazily initialize Neo4j connection.
+        
+        Returns:
+            True if connection is available
+        """
+        if self.connection is not None:
+            return self.connection.is_connected()
+        
+        if self._init_attempted:
+            return False
+        
+        self._init_attempted = True
+        
+        try:
+            from utils.graph_db import Neo4jConnection, GraphQuery
+            
+            if self._neo4j_uri:
+                import os
+                user = os.getenv("NEO4J_USER", "neo4j")
+                password = os.getenv("NEO4J_PASSWORD", "")
+                self.connection = Neo4jConnection(self._neo4j_uri, user, password)
+            else:
+                self.connection = Neo4jConnection.from_env()
+            
+            self.query_builder = GraphQuery(self.connection)
+            logger.info("Graph enhancement enabled - Neo4j connected")
+            return True
+            
+        except Exception as e:
+            logger.warning(f"Graph enhancement disabled - Neo4j not available: {e}")
+            return False
+    
+    def should_enhance(
+        self,
+        query_type: str,
+        requires_code: bool
+    ) -> bool:
+        """
+        Determine if graph enhancement should be applied.
+        
+        Args:
+            query_type: Query type from intent classification
+            requires_code: Whether query requires code examples
+            
+        Returns:
+            True if enhancement should be applied
+        """
+        if self.mode == GraphEnhancementMode.DISABLED:
+            return False
+        
+        if self.mode == GraphEnhancementMode.ALWAYS:
+            return True
+        
+        if self.mode == GraphEnhancementMode.CODE_QUERIES_ONLY:
+            return query_type in ["implementation", "debugging", "architecture"]
+        
+        if self.mode == GraphEnhancementMode.FLOW_QUERIES_ONLY:
+            return query_type in ["architecture", "debugging"]
+        
+        return False
+    
+    def extract_entities(
+        self,
+        results: List[Dict[str, Any]]
+    ) -> Set[Tuple[str, str]]:
+        """
+        Extract entity names from retrieved chunks.
+        
+        Args:
+            results: Vector search results
+            
+        Returns:
+            Set of (entity_name, entity_type) tuples
+        """
+        entities = set()
+        
+        for result in results:
+            content = result.get("content", "")
+            metadata = result.get("metadata", {})
+            
+            # Extract from content using patterns
+            for pattern in self._entity_patterns:
+                matches = pattern.findall(content)
+                for match in matches:
+                    if isinstance(match, tuple):
+                        # Multiple groups - take first non-empty
+                        for group in match:
+                            if group:
+                                entities.add((group, "detected"))
+                                break
+                    else:
+                        entities.add((match, "detected"))
+            
+            # Extract from metadata
+            if "class_name" in metadata:
+                entities.add((metadata["class_name"], "Controller" if "Controller" in metadata["class_name"] else "Class"))
+            
+            if "method_name" in metadata:
+                entities.add((metadata["method_name"], "Action"))
+            
+            if "file_name" in metadata:
+                file_name = metadata["file_name"]
+                # Extract view name from blade files
+                if ".blade.php" in file_name:
+                    view_name = file_name.replace(".blade.php", "")
+                    entities.add((view_name, "BladeView"))
+        
+        logger.debug(f"Extracted {len(entities)} entities from {len(results)} results")
+        return entities
+    
+    def get_graph_context(
+        self,
+        entities: Set[Tuple[str, str]],
+        query: str,
+        max_depth: int = 2
+    ) -> GraphContext:
+        """
+        Query the graph for related entities.
+        
+        Args:
+            entities: Extracted entity names
+            query: Original query (for route detection)
+            max_depth: Maximum traversal depth
+            
+        Returns:
+            GraphContext with related entities and flow information
+        """
+        import time
+        start = time.time()
+        
+        if not self._ensure_connection() or not self.query_builder:
+            return GraphContext([], [], None, 0, 0)
+        
+        related_entities = []
+        call_graph = []
+        route_flow = None
+        
+        # Check if query mentions a route pattern
+        route_match = re.search(r'/[\w/{}]+', query)
+        if route_match:
+            route_uri = route_match.group()
+            try:
+                flow_result = self.query_builder.get_route_flow(route_uri)
+                if flow_result.entities:
+                    route_flow = self._format_route_flow(flow_result.entities)
+                    related_entities.extend(flow_result.entities)
+            except Exception as e:
+                logger.warning(f"Route flow query failed: {e}")
+        
+        # Query call graph for each action/function entity
+        for entity_name, entity_type in entities:
+            if entity_type in ["Action", "detected"]:
+                try:
+                    graph_result = self.query_builder.get_function_call_graph(
+                        entity_name,
+                        depth=max_depth
+                    )
+                    call_graph.extend(graph_result.entities)
+                except Exception as e:
+                    logger.debug(f"Call graph query failed for {entity_name}: {e}")
+            
+            elif entity_type in ["Controller", "Class"] and entity_name.endswith("Controller"):
+                try:
+                    views_result = self.query_builder.get_related_views(entity_name)
+                    related_entities.extend(views_result.entities)
+                except Exception as e:
+                    logger.debug(f"Related views query failed for {entity_name}: {e}")
+        
+        # Deduplicate by id
+        seen_ids = set()
+        unique_entities = []
+        for entity in related_entities + call_graph:
+            entity_id = entity.get("id", str(entity))
+            if entity_id not in seen_ids:
+                seen_ids.add(entity_id)
+                unique_entities.append(entity)
+        
+        elapsed = (time.time() - start) * 1000
+        
+        return GraphContext(
+            related_entities=unique_entities[:self.config.max_related_entities],
+            call_graph=call_graph[:5],
+            route_flow=route_flow,
+            traversal_depth=max_depth,
+            query_time_ms=elapsed
+        )
+    
+    def _format_route_flow(self, entities: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Format route flow entities into structured dict."""
+        flow = {"route": None, "controller": None, "action": None, "models": [], "views": []}
+        
+        for entity in entities:
+            entity_type = entity.get("type", "")
+            if entity_type == "Route":
+                flow["route"] = entity
+            elif entity_type == "Controller":
+                flow["controller"] = entity
+            elif entity_type == "Action":
+                flow["action"] = entity
+            elif entity_type == "Model":
+                flow["models"].append(entity)
+            elif entity_type == "BladeView":
+                flow["views"].append(entity)
+        
+        return flow
+    
+    async def enhance_results(
+        self,
+        query: str,
+        results: Dict[str, List[Dict[str, Any]]],
+        query_type: str = "implementation",
+        requires_code: bool = True,
+        max_graph_depth: int = 2
+    ) -> Tuple[Dict[str, List[Dict[str, Any]]], Optional[GraphContext]]:
+        """
+        Enhance vector retrieval results with graph context.
+        
+        Args:
+            query: User query
+            results: Results by source from vector retrieval
+            query_type: Query type from intent classifier
+            requires_code: Whether query requires code
+            max_graph_depth: Maximum graph traversal depth
+            
+        Returns:
+            Tuple of (enhanced results, graph context)
+        """
+        # Check if enhancement should be applied
+        if not self.should_enhance(query_type, requires_code):
+            logger.debug(f"Graph enhancement skipped for query_type={query_type}")
+            return results, None
+        
+        # Flatten results for entity extraction
+        all_results = []
+        for source_results in results.values():
+            all_results.extend(source_results)
+        
+        if not all_results:
+            return results, None
+        
+        # Extract entities from results
+        entities = self.extract_entities(all_results)
+        
+        if not entities:
+            logger.debug("No entities extracted from results")
+            return results, None
+        
+        # Get graph context
+        graph_context = self.get_graph_context(entities, query, max_graph_depth)
+        
+        if not graph_context.related_entities and not graph_context.call_graph:
+            logger.debug("No graph context found")
+            return results, graph_context
+        
+        # Boost results that are related to graph-discovered entities
+        enhanced_results = self._apply_graph_boost(results, graph_context)
+        
+        logger.info(
+            f"Graph enhancement: found {len(graph_context.related_entities)} related entities, "
+            f"query_time={graph_context.query_time_ms:.1f}ms"
+        )
+        
+        return enhanced_results, graph_context
+    
+    def _apply_graph_boost(
+        self,
+        results: Dict[str, List[Dict[str, Any]]],
+        graph_context: GraphContext
+    ) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Apply score boost to results that connect to graph-discovered entities.
+        
+        Args:
+            results: Original results by source
+            graph_context: Graph context with related entities
+            
+        Returns:
+            Results with boosted scores
+        """
+        # Build set of entity names from graph context for matching
+        graph_entity_names = set()
+        for entity in graph_context.related_entities + graph_context.call_graph:
+            name = entity.get("name", "")
+            if name:
+                graph_entity_names.add(name.lower())
+        
+        if not graph_entity_names:
+            return results
+        
+        enhanced = {}
+        
+        for source, source_results in results.items():
+            enhanced_source_results = []
+            
+            for result in source_results:
+                result_copy = result.copy()
+                content = result.get("content", "").lower()
+                metadata = result.get("metadata", {})
+                
+                # Check if result mentions any graph-discovered entities
+                boost_score = 0.0
+                for entity_name in graph_entity_names:
+                    if entity_name in content:
+                        boost_score += 0.1
+                    if entity_name == metadata.get("class_name", "").lower():
+                        boost_score += 0.2
+                    if entity_name == metadata.get("method_name", "").lower():
+                        boost_score += 0.2
+                
+                # Apply boost to existing scores
+                if boost_score > 0:
+                    boost_score = min(boost_score, self.config.rrf_graph_weight)
+                    result_copy["graph_boost"] = boost_score
+                    
+                    # Boost RRF score if present
+                    if "rrf_score" in result_copy:
+                        result_copy["rrf_score"] += boost_score
+                    
+                    # Reduce distance if present (lower = better)
+                    if "distance" in result_copy:
+                        result_copy["distance"] *= (1 - boost_score)
+                
+                enhanced_source_results.append(result_copy)
+            
+            # Re-sort by boosted score
+            enhanced_source_results.sort(
+                key=lambda x: x.get("rrf_score", 0) if "rrf_score" in x else -x.get("distance", 999),
+                reverse=("rrf_score" in enhanced_source_results[0] if enhanced_source_results else False)
+            )
+            
+            enhanced[source] = enhanced_source_results
+        
+        return enhanced
+    
+    def format_context_for_llm(
+        self,
+        vector_context: str,
+        graph_context: Optional[GraphContext]
+    ) -> str:
+        """
+        Combine vector and graph context for LLM prompt.
+        
+        Args:
+            vector_context: Context from vector retrieval
+            graph_context: Context from graph traversal
+            
+        Returns:
+            Combined context string
+        """
+        if not graph_context:
+            return vector_context
+        
+        graph_str = graph_context.to_context_string()
+        
+        if not graph_str:
+            return vector_context
+        
+        return f"""## Code Relationships (from knowledge graph)
+{graph_str}
+
+## Retrieved Code/Documentation
+{vector_context}"""
+    
+    def close(self):
+        """Close the Neo4j connection."""
+        if self.connection:
+            self.connection.close()
+
+
+# =============================================================================
+# Integration Helper
+# =============================================================================
+
+def create_graph_enhanced_retriever(
+    neo4j_uri: Optional[str] = None,
+    mode: str = "code_queries_only",
+    max_depth: int = 2,
+    graph_weight: float = 0.3
+) -> GraphEnhancedRetriever:
+    """
+    Factory function to create a configured GraphEnhancedRetriever.
+    
+    Args:
+        neo4j_uri: Neo4j connection URI
+        mode: Enhancement mode ("always", "code_queries_only", "flow_queries_only", "disabled")
+        max_depth: Maximum graph traversal depth
+        graph_weight: RRF weight for graph-discovered entities
+        
+    Returns:
+        Configured GraphEnhancedRetriever instance
+    """
+    mode_enum = GraphEnhancementMode(mode)
+    config = GraphEnhancementConfig(
+        max_traversal_depth=max_depth,
+        rrf_graph_weight=graph_weight
+    )
+    
+    return GraphEnhancedRetriever(
+        neo4j_uri=neo4j_uri,
+        config=config,
+        mode=mode_enum
+    )
