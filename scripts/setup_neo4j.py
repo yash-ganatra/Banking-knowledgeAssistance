@@ -75,8 +75,9 @@ def main():
             sys.exit(1)
     except Exception as e:
         print(f"❌ Connection error: {e}")
-        print("\nMake sure Neo4j is running. You can start it with Docker:")
-        print("docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/your_password neo4j:5")
+        print("\nMake sure Neo4j is running.")
+        print("If using Neo4j Desktop: Start your DBMS and ensure it's active.")
+        print("If using Docker: docker run -d --name neo4j -p 7474:7474 -p 7687:7687 -e NEO4J_AUTH=neo4j/your_password neo4j:5")
         sys.exit(1)
         
     # 3. Initialize Schema
