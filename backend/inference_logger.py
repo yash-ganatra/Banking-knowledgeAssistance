@@ -88,6 +88,10 @@ class InferenceLogEntry:
     reranking_time_ms: float = 0
     llm_time_ms: float = 0
     
+    # Graph Enhancement
+    graph_used: bool = False
+    graph_context: Optional[Dict[str, Any]] = None
+    
     # User/Session
     user_id: Optional[int] = None
     conversation_id: Optional[int] = None
@@ -228,6 +232,25 @@ class InferenceLogger:
         """Log which sources were actually queried"""
         if self.current_log:
             self.current_log.sources_queried = sources
+
+    def log_graph_context(self, context: Any) -> None:
+        """Log graph enhancement context"""
+        if self.current_log and context:
+            self.current_log.graph_used = True
+            # Convert context object to dict if needed
+            if hasattr(context, 'to_dict'):
+                self.current_log.graph_context = context.to_dict()
+            elif isinstance(context, dict):
+                self.current_log.graph_context = context
+            else:
+                # Fallback for other types
+                try:
+                    self.current_log.graph_context = {
+                        "related_entities": getattr(context, "related_entities", []),
+                        "traversal_depth": getattr(context, "traversal_depth", 0),
+                    }
+                except:
+                    self.current_log.graph_context = {"raw": str(context)}
     
     def log_initial_retrieval(
         self,
@@ -443,6 +466,10 @@ class InferenceLogger:
                 dense_results_count=log_entry.dense_results_count,
                 sparse_results_count=log_entry.sparse_results_count,
                 found_by_both_count=log_entry.found_by_both_count,
+                # Graph Enhancement
+                graph_used=log_entry.graph_used,
+                graph_context=log_entry.graph_context,
+                
                 total_time_ms=log_entry.total_time_ms,
                 routing_time_ms=log_entry.routing_time_ms,
                 retrieval_time_ms=log_entry.retrieval_time_ms,

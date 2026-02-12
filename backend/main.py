@@ -352,7 +352,9 @@ def startup_event():
                 js_engine=js_engine,
                 blade_engine=blade_engine,
                 use_hybrid_search=True,  # Enable hybrid (dense + BM25) search
-                bm25_index_dir=bm25_index_dir
+                bm25_index_dir=bm25_index_dir,
+                use_graph_enhancement=True,
+                neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687")
             )
             unified_query_engine = UnifiedQueryEngine(
                 intent_classifier=intent_classifier,

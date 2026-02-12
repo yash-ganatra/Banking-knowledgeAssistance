@@ -50,6 +50,7 @@ const PipelineStage = ({ stage, isLast }) => {
       case 'preprocessing': return '📝';
       case 'routing': return '🔀';
       case 'retrieval': return '🔍';
+      case 'graph_enhancement': return '🕸️';
       case 'reranking': return '⚡';
       case 'llm_generation': return '🤖';
       default: return '▸';
@@ -92,8 +93,239 @@ const PipelineStage = ({ stage, isLast }) => {
             Filtered: {stage.chunks_before} → {stage.chunks_after} chunks
           </div>
         )}
+        {stage.graph_context && (
+          <div className="mt-3 space-y-3">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold text-purple-300 flex items-center gap-2">
+                <span>🕸️ Graph Context</span>
+                <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] border border-purple-500/30">
+                  {stage.graph_context.related_entities?.length || 0} entities
+                </span>
+                {stage.graph_context.call_graph?.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px] border border-cyan-500/30">
+                    {stage.graph_context.call_graph.length} in call graph
+                  </span>
+                )}
+                {stage.graph_context.relationships?.length > 0 && (
+                  <span className="px-1.5 py-0.5 rounded bg-orange-500/20 text-orange-300 text-[10px] border border-orange-500/30">
+                    {stage.graph_context.relationships.length} relationships
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                {stage.graph_context.traversal_depth !== undefined && (
+                  <span>Depth: {stage.graph_context.traversal_depth}</span>
+                )}
+                {stage.graph_context.query_time_ms !== undefined && (
+                  <span>⏱ {stage.graph_context.query_time_ms.toFixed(0)}ms</span>
+                )}
+              </div>
+            </div>
+
+            {/* Route Flow (if present) */}
+            {stage.graph_context.route_flow && (
+              <div className="bg-gray-900/60 rounded-lg p-3 border border-indigo-500/20">
+                <div className="text-[10px] text-indigo-400 uppercase tracking-wider font-semibold mb-2">Request Flow</div>
+                <div className="flex items-center flex-wrap gap-1">
+                  {stage.graph_context.route_flow.route && (
+                    <>
+                      <div className="flex items-center gap-1 px-2 py-1 rounded bg-indigo-500/15 border border-indigo-500/30">
+                        <span className="text-indigo-300 text-[10px] font-semibold">ROUTE</span>
+                        <span className="text-indigo-200 text-xs font-mono">
+                          {stage.graph_context.route_flow.route.method || 'GET'} {stage.graph_context.route_flow.route.uri}
+                        </span>
+                      </div>
+                      <span className="text-gray-500 text-xs">→</span>
+                    </>
+                  )}
+                  {stage.graph_context.route_flow.controller && (
+                    <>
+                      <div className="flex items-center gap-1 px-2 py-1 rounded bg-blue-500/15 border border-blue-500/30">
+                        <span className="text-blue-300 text-[10px] font-semibold">CTRL</span>
+                        <span className="text-blue-200 text-xs font-mono">{stage.graph_context.route_flow.controller.name}</span>
+                      </div>
+                      <span className="text-gray-500 text-xs">→</span>
+                    </>
+                  )}
+                  {stage.graph_context.route_flow.action && (
+                    <>
+                      <div className="flex items-center gap-1 px-2 py-1 rounded bg-green-500/15 border border-green-500/30">
+                        <span className="text-green-300 text-[10px] font-semibold">ACTION</span>
+                        <span className="text-green-200 text-xs font-mono">{stage.graph_context.route_flow.action.name}()</span>
+                      </div>
+                    </>
+                  )}
+                  {stage.graph_context.route_flow.models?.length > 0 && (
+                    <>
+                      <span className="text-gray-500 text-xs">→</span>
+                      {stage.graph_context.route_flow.models.map((m, i) => (
+                        <div key={i} className="flex items-center gap-1 px-2 py-1 rounded bg-amber-500/15 border border-amber-500/30">
+                          <span className="text-amber-300 text-[10px] font-semibold">MODEL</span>
+                          <span className="text-amber-200 text-xs font-mono">{m.name}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                  {stage.graph_context.route_flow.views?.length > 0 && (
+                    <>
+                      <span className="text-gray-500 text-xs">→</span>
+                      {stage.graph_context.route_flow.views.map((v, i) => (
+                        <div key={i} className="flex items-center gap-1 px-2 py-1 rounded bg-emerald-500/15 border border-emerald-500/30">
+                          <span className="text-emerald-300 text-[10px] font-semibold">VIEW</span>
+                          <span className="text-emerald-200 text-xs font-mono">{v.name}</span>
+                        </div>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Call Graph */}
+            {stage.graph_context.call_graph?.length > 0 && (
+              <div className="bg-gray-900/60 rounded-lg p-3 border border-cyan-500/20">
+                <div className="text-[10px] text-cyan-400 uppercase tracking-wider font-semibold mb-2">Call Graph (Functions & Dependencies)</div>
+                <div className="space-y-1.5">
+                  {stage.graph_context.call_graph.map((item, idx) => {
+                    const relType = item.rel_type || item.relationship || '';
+                    const relLabel = relType.replace(/_/g, ' ').toLowerCase();
+                    const typeColor = {
+                      'Action': 'text-green-300 bg-green-500/15 border-green-500/30',
+                      'Model': 'text-amber-300 bg-amber-500/15 border-amber-500/30',
+                      'BladeView': 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+                      'DBTable': 'text-red-300 bg-red-500/15 border-red-500/30',
+                      'Controller': 'text-blue-300 bg-blue-500/15 border-blue-500/30',
+                      'Route': 'text-indigo-300 bg-indigo-500/15 border-indigo-500/30',
+                    }[item.type] || 'text-purple-300 bg-purple-500/15 border-purple-500/30';
+                    return (
+                      <div key={idx} className="flex items-center gap-2 text-xs group">
+                        <span className={`px-1.5 py-0.5 rounded border text-[10px] font-semibold uppercase ${typeColor}`}>
+                          {item.type || 'Entity'}
+                        </span>
+                        <span className="text-gray-200 font-mono font-medium">{item.name}</span>
+                        {item.file && (
+                          <span className="text-gray-600 font-mono text-[10px] truncate max-w-[200px] opacity-0 group-hover:opacity-100 transition-opacity">
+                            {item.file}
+                          </span>
+                        )}
+                        {relLabel && (
+                          <span className="ml-auto px-1.5 py-0.5 rounded bg-gray-700/50 text-gray-400 text-[10px] italic">
+                            {relLabel}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Neo4j Relationships (the key detail users want) */}
+            {stage.graph_context.relationships?.length > 0 && (
+              <div className="bg-gray-900/60 rounded-lg p-3 border border-orange-500/20">
+                <div className="text-[10px] text-orange-400 uppercase tracking-wider font-semibold mb-2">
+                  Neo4j Relationships Retrieved ({stage.graph_context.relationships.length})
+                </div>
+                <div className="space-y-1">
+                  {stage.graph_context.relationships.map((rel, idx) => {
+                    const srcColor = {
+                      'Action': 'text-green-300 bg-green-500/15 border-green-500/30',
+                      'Controller': 'text-blue-300 bg-blue-500/15 border-blue-500/30',
+                      'Model': 'text-amber-300 bg-amber-500/15 border-amber-500/30',
+                      'BladeView': 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+                      'UIElement': 'text-pink-300 bg-pink-500/15 border-pink-500/30',
+                      'Route': 'text-indigo-300 bg-indigo-500/15 border-indigo-500/30',
+                    }[rel.source_type] || 'text-gray-300 bg-gray-500/15 border-gray-500/30';
+                    const tgtColor = {
+                      'Action': 'text-green-300 bg-green-500/15 border-green-500/30',
+                      'Controller': 'text-blue-300 bg-blue-500/15 border-blue-500/30',
+                      'Model': 'text-amber-300 bg-amber-500/15 border-amber-500/30',
+                      'BladeView': 'text-emerald-300 bg-emerald-500/15 border-emerald-500/30',
+                      'UIElement': 'text-pink-300 bg-pink-500/15 border-pink-500/30',
+                      'DBTable': 'text-red-300 bg-red-500/15 border-red-500/30',
+                      'TargetAction': 'text-teal-300 bg-teal-500/15 border-teal-500/30',
+                      'Route': 'text-indigo-300 bg-indigo-500/15 border-indigo-500/30',
+                    }[rel.target_type] || 'text-gray-300 bg-gray-500/15 border-gray-500/30';
+                    const relLabel = (rel.relationship || '').replace(/_/g, ' ');
+                    return (
+                      <div key={idx} className="flex items-center gap-1.5 text-xs">
+                        <span className={`px-1.5 py-0.5 rounded border font-mono text-[11px] ${srcColor}`}>
+                          {rel.source}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-orange-500/10 text-orange-300 text-[9px] font-semibold border border-orange-500/20 whitespace-nowrap">
+                          {relLabel}
+                        </span>
+                        <span className="text-gray-500">→</span>
+                        <span className={`px-1.5 py-0.5 rounded border font-mono text-[11px] ${tgtColor}`}>
+                          {rel.target}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Entities Grouped by Type */}
+            {stage.graph_context.related_entities?.length > 0 && (() => {
+              const grouped = {};
+              stage.graph_context.related_entities.forEach(e => {
+                const t = e.type || e.labels?.[0] || 'Unknown';
+                if (!grouped[t]) grouped[t] = [];
+                grouped[t].push(e);
+              });
+              const typeStyles = {
+                'Action': { label: 'text-green-400', badge: 'text-green-300 bg-green-500/10 border-green-500/20', icon: '⚡' },
+                'Controller': { label: 'text-blue-400', badge: 'text-blue-300 bg-blue-500/10 border-blue-500/20', icon: '🎮' },
+                'Model': { label: 'text-amber-400', badge: 'text-amber-300 bg-amber-500/10 border-amber-500/20', icon: '📦' },
+                'BladeView': { label: 'text-emerald-400', badge: 'text-emerald-300 bg-emerald-500/10 border-emerald-500/20', icon: '🖼️' },
+                'UIElement': { label: 'text-pink-400', badge: 'text-pink-300 bg-pink-500/10 border-pink-500/20', icon: '🔘' },
+                'DBTable': { label: 'text-red-400', badge: 'text-red-300 bg-red-500/10 border-red-500/20', icon: '🗄️' },
+                'Route': { label: 'text-indigo-400', badge: 'text-indigo-300 bg-indigo-500/10 border-indigo-500/20', icon: '🛤️' },
+                'JSFunction': { label: 'text-yellow-400', badge: 'text-yellow-300 bg-yellow-500/10 border-yellow-500/20', icon: '📜' },
+                'TargetAction': { label: 'text-teal-400', badge: 'text-teal-300 bg-teal-500/10 border-teal-500/20', icon: '🎯' },
+              };
+              return (
+                <div className="bg-gray-900/60 rounded-lg p-3 border border-purple-500/20">
+                  <div className="text-[10px] text-purple-400 uppercase tracking-wider font-semibold mb-2">Discovered Entities by Type</div>
+                  <div className="space-y-2">
+                    {Object.entries(grouped).map(([type, entities]) => {
+                      const style = typeStyles[type] || { label: 'text-gray-400', badge: 'text-gray-300 bg-gray-500/10 border-gray-500/20', icon: '•' };
+                      return (
+                        <div key={type}>
+                          <div className="flex items-center gap-1.5 mb-1">
+                            <span className="text-sm">{style.icon}</span>
+                            <span className={`${style.label} text-[10px] font-semibold uppercase tracking-wider`}>{type}</span>
+                            <span className="text-gray-600 text-[10px]">({entities.length})</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 ml-5">
+                            {entities.map((entity, i) => (
+                              <div
+                                key={i}
+                                className={`group relative flex items-center gap-1 px-2 py-0.5 rounded border cursor-default ${style.badge}`}
+                                title={entity.file ? `File: ${entity.file}` : ''}
+                              >
+                                <span className="text-xs font-mono">{entity.name}</span>
+                                {entity.file && (
+                                  <span className="text-gray-600 text-[9px] font-mono hidden group-hover:inline truncate max-w-[150px]">
+                                    ({entity.file.split('/').pop()})
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
       </div>
-    </div>
+    </div >
   );
 };
 
@@ -120,6 +352,11 @@ const LogRow = ({ log, onViewDetails }) => {
                   <XCircle className="w-4 h-4 text-red-400" />
                 )}
                 <span className="text-gray-200 line-clamp-1">{log.query}</span>
+                {log.graph_used && (
+                  <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] border border-purple-500/30 flex-shrink-0" title="Graph Enhancement Used">
+                    🕸️ Graph
+                  </span>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-2 text-xs text-gray-400">
                 <span className="flex items-center gap-1">
@@ -189,6 +426,12 @@ const LogRow = ({ log, onViewDetails }) => {
               <div className="text-gray-500 text-xs mb-1">Hybrid Search</div>
               <div className={log.hybrid_search_used ? "text-green-400" : "text-gray-500"}>
                 {log.hybrid_search_used ? 'Enabled' : 'Disabled'}
+              </div>
+            </div>
+            <div>
+              <div className="text-gray-500 text-xs mb-1">Graph Enhancement</div>
+              <div className={log.graph_used ? "text-purple-400" : "text-gray-500"}>
+                {log.graph_used ? '🕸️ Active' : 'Not Used'}
               </div>
             </div>
           </div>
@@ -387,8 +630,8 @@ const DetailModal = ({ logId, onClose }) => {
                     key={tab}
                     onClick={() => setActiveTab(tab)}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab
-                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        : 'text-gray-400 hover:text-white hover:bg-gray-700'
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
                       }`}
                   >
                     {tab === 'pipeline' ? 'Pipeline' :

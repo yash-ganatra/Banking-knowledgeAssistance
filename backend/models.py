@@ -141,6 +141,10 @@ class InferenceLog(Base):
     sparse_results_count = Column(Integer, nullable=True)
     found_by_both_count = Column(Integer, nullable=True)
     
+    # Graph Enhancement Stats
+    graph_used = Column(Boolean, default=False)
+    graph_context = Column(JSON, nullable=True)  # Stores related entities/relationships found
+    
     # Timing
     total_time_ms = Column(Float, nullable=True)
     routing_time_ms = Column(Float, nullable=True)

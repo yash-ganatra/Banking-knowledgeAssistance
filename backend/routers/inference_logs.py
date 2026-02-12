@@ -88,6 +88,10 @@ class InferenceLogResponse(BaseModel):
     sparse_results_count: Optional[int]
     found_by_both_count: Optional[int]
     
+    # Graph Enhancement
+    graph_used: bool = False
+    graph_context: Optional[dict] = None
+    
     # Timing
     total_time_ms: Optional[float]
     routing_time_ms: Optional[float]
@@ -307,6 +311,15 @@ async def get_pipeline_visualization(
         "time_ms": log.retrieval_time_ms
     })
     
+    # Stage 3.5: Graph Enhancement
+    if log.graph_used:
+        stages.append({
+            "stage": "graph_enhancement",
+            "name": "Graph Enhancement",
+            "graph_context": log.graph_context,
+            "time_ms": None # We didn't explicitly track graph time separate from retrieval, could add later
+        })
+    
     # Stage 4: Filtering and reranking
     stages.append({
         "stage": "reranking",
@@ -363,6 +376,8 @@ async def get_pipeline_visualization(
         "query": log.query,
         "success": log.success,
         "total_time_ms": log.total_time_ms,
+        "graph_used": log.graph_used,
+        "graph_context": log.graph_context,
         "stages": stages,
         "chunks_before_rerank": chunks_before_rerank,
         "chunks_after_rerank": chunks_after_rerank,

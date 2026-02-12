@@ -35,6 +35,7 @@ class GraphContext:
     related_entities: List[Dict[str, Any]]
     call_graph: List[Dict[str, Any]]  # Functions that call/are called by retrieved chunks
     route_flow: Optional[Dict[str, Any]]  # Route → Controller → Action flow if applicable
+    relationships: List[Dict[str, Any]]  # Explicit relationship triples: source → type → target
     traversal_depth: int
     query_time_ms: float
     
@@ -70,7 +71,8 @@ class GraphContext:
             if controller and action:
                 parts.append(f"- Handler: `{controller.get('name', '')}@{action.get('name', '')}`")
             if models:
-                parts.append(f"- Models: {', '.join(f'`{m.get(\"name\", \"\")}`' for m in models[:3])}")
+                model_names = [f"`{m.get('name', '')}`" for m in models[:3]]
+                parts.append(f"- Models: {', '.join(model_names)}")
         
         if self.related_entities:
             # Group by type
@@ -87,6 +89,17 @@ class GraphContext:
                 parts.append(f"- {entity_type}s: {', '.join(f'`{n}`' for n in names[:5])}")
         
         return "\n".join(parts) if parts else ""
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary for JSON serialization/logging."""
+        return {
+            "related_entities": self.related_entities,
+            "call_graph": self.call_graph,
+            "route_flow": self.route_flow,
+            "relationships": self.relationships,
+            "traversal_depth": self.traversal_depth,
+            "query_time_ms": self.query_time_ms
+        }
 
 
 @dataclass
@@ -212,7 +225,7 @@ class GraphEnhancedRetriever:
             return True
         
         if self.mode == GraphEnhancementMode.CODE_QUERIES_ONLY:
-            return query_type in ["implementation", "debugging", "architecture"]
+            return query_type in ["implementation", "debugging", "architecture"] or requires_code
         
         if self.mode == GraphEnhancementMode.FLOW_QUERIES_ONLY:
             return query_type in ["architecture", "debugging"]
@@ -289,10 +302,11 @@ class GraphEnhancedRetriever:
         start = time.time()
         
         if not self._ensure_connection() or not self.query_builder:
-            return GraphContext([], [], None, 0, 0)
+            return GraphContext([], [], None, [], 0, 0)
         
         related_entities = []
         call_graph = []
+        all_relationships = []
         route_flow = None
         
         # Check if query mentions a route pattern
@@ -316,6 +330,9 @@ class GraphEnhancedRetriever:
                         depth=max_depth
                     )
                     call_graph.extend(graph_result.entities)
+                    # Collect relationship triples from paths
+                    if graph_result.paths:
+                        all_relationships.extend(graph_result.paths)
                 except Exception as e:
                     logger.debug(f"Call graph query failed for {entity_name}: {e}")
             
@@ -323,10 +340,13 @@ class GraphEnhancedRetriever:
                 try:
                     views_result = self.query_builder.get_related_views(entity_name)
                     related_entities.extend(views_result.entities)
+                    # Collect relationship triples from paths
+                    if views_result.paths:
+                        all_relationships.extend(views_result.paths)
                 except Exception as e:
                     logger.debug(f"Related views query failed for {entity_name}: {e}")
         
-        # Deduplicate by id
+        # Deduplicate entities by id
         seen_ids = set()
         unique_entities = []
         for entity in related_entities + call_graph:
@@ -335,12 +355,22 @@ class GraphEnhancedRetriever:
                 seen_ids.add(entity_id)
                 unique_entities.append(entity)
         
+        # Deduplicate relationships
+        seen_rels = set()
+        unique_rels = []
+        for rel in all_relationships:
+            rel_key = f"{rel.get('source')}-{rel.get('relationship')}-{rel.get('target')}"
+            if rel_key not in seen_rels:
+                seen_rels.add(rel_key)
+                unique_rels.append(rel)
+        
         elapsed = (time.time() - start) * 1000
         
         return GraphContext(
             related_entities=unique_entities[:self.config.max_related_entities],
             call_graph=call_graph[:5],
             route_flow=route_flow,
+            relationships=unique_rels,
             traversal_depth=max_depth,
             query_time_ms=elapsed
         )

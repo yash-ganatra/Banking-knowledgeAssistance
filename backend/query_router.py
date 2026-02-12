@@ -21,6 +21,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from utils.groq_rate_limiter import GroqRateLimiter
 from utils.bm25_index import BM25IndexManager
 from utils.hybrid_search import HybridSearchManager, HybridSearchConfig, SearchMethod, QueryIntent, QueryExpansionInfo
+from utils.graph_enhanced_retriever import create_graph_enhanced_retriever, GraphEnhancedRetriever, GraphContext
 
 # Security imports
 from security.security_config import (
@@ -622,7 +623,9 @@ class QueryRouter:
                  blade_engine,
                  use_cross_encoder: bool = True,
                  use_hybrid_search: bool = True,
-                 bm25_index_dir: str = None):
+                 bm25_index_dir: str = None,
+                 use_graph_enhancement: bool = True,
+                 neo4j_uri: str = None):
         """
         Initialize with all available query engines
         
@@ -634,6 +637,8 @@ class QueryRouter:
             use_cross_encoder: Whether to use cross-encoder reranking
             use_hybrid_search: Whether to use hybrid (dense + BM25) search
             bm25_index_dir: Directory containing BM25 indices
+            use_graph_enhancement: Whether to use graph context
+            neo4j_uri: Optional Neo4j URI
         """
         self.engines = {
             KnowledgeSource.BUSINESS_DOCS: business_engine,
@@ -643,6 +648,19 @@ class QueryRouter:
         }
         self.result_fusion = ResultFusion(k=60, use_cross_encoder=use_cross_encoder)
         
+        # Initialize Graph Enhanced Retriever
+        self.graph_retriever = None
+        if use_graph_enhancement:
+            try:
+                self.graph_retriever = create_graph_enhanced_retriever(
+                    neo4j_uri=neo4j_uri,
+                    mode="code_queries_only",  # Default to code/flow queries
+                    graph_weight=0.4
+                )
+                logger.info("GraphEnhancedRetriever initialized")
+            except Exception as e:
+                logger.warning(f"Failed to initialize GraphEnhancedRetriever: {e}")
+
         # Initialize Hybrid Search
         self.use_hybrid_search = use_hybrid_search
         self.hybrid_manager = None
@@ -846,9 +864,9 @@ class QueryRouter:
                           final_top_k: Optional[int] = None,
                           min_relevance_score: float = 2.0,
                           inference_logger = None,
-                          query_intent: Optional[QueryIntent] = None) -> List[Dict]:
+                          query_intent: Optional[QueryIntent] = None) -> Tuple[List[Dict], Optional[GraphContext]]:
         """
-        Query multiple sources with configurable relevance filtering
+        Query multiple sources with configurable relevance filtering and graph enhancement
         
         Args:
             sources: List of knowledge sources to query
@@ -860,7 +878,7 @@ class QueryRouter:
             query_intent: Optional intent info for controlling query expansion
             
         Returns:
-            Merged, filtered and ranked results
+            Tuple of (Merged results, GraphContext)
         """
         if final_top_k is None:
             final_top_k = top_k
@@ -876,9 +894,36 @@ class QueryRouter:
         retrieval_time_ms = (time.time() - retrieval_start) * 1000
         
         # Log initial retrieval for each source
+        # Log initial retrieval for each source
         if inference_logger:
             for source_name, results in results_by_source.items():
                 inference_logger.log_initial_retrieval(source_name, results, retrieval_time_ms / len(results_by_source))
+        
+        # Apply Graph Enhancement
+        graph_context = None
+        if self.graph_retriever:
+            try:
+                # Use query type from intent if available
+                q_type = query_intent.query_type if query_intent else "mixed"
+                req_code = query_intent.requires_code if query_intent else True
+                
+                enhanced_results, context = await self.graph_retriever.enhance_results(
+                    query=query,
+                    results=results_by_source,
+                    query_type=q_type,
+                    requires_code=req_code
+                )
+                
+                if context:
+                    graph_context = context
+                    results_by_source = enhanced_results
+                    logger.info(f"Graph enhancement applied: parsed {len(context.related_entities)} entities")
+                    
+                    if inference_logger:
+                        inference_logger.log_graph_context(context)
+            except Exception as e:
+                logger.error(f"Graph enhancement failed: {e}")
+
         
         # Pre-filter results: Remove obviously irrelevant results BEFORE RRF
         # This prevents low-quality results from polluting the fusion
@@ -932,14 +977,14 @@ class QueryRouter:
         if inference_logger:
             inference_logger.log_reranking(reranked_results, rerank_time_ms)
         
-        return reranked_results
+        return reranked_results, graph_context
     
     async def query_single_source(self,
                            source: KnowledgeSource,
                            query: str,
                            top_k: int = 5,
                            inference_logger = None,
-                           query_intent: Optional[QueryIntent] = None) -> List[Dict]:
+                           query_intent: Optional[QueryIntent] = None) -> Tuple[List[Dict], Optional[GraphContext]]:
         """
         Query a single source directly (no RRF needed)
         
@@ -951,7 +996,7 @@ class QueryRouter:
             query_intent: Optional intent info for controlling query expansion
             
         Returns:
-            Results from the source
+            Tuple of (Results from the source, GraphContext)
         """
         retrieval_start = time.time()
         results_by_source, _ = await self.query_parallel(
@@ -961,6 +1006,30 @@ class QueryRouter:
         )
         retrieval_time_ms = (time.time() - retrieval_start) * 1000
         
+        # Apply Graph Enhancement
+        graph_context = None
+        if self.graph_retriever:
+            try:
+                q_type = query_intent.query_type if query_intent else "mixed"
+                req_code = query_intent.requires_code if query_intent else True
+                
+                enhanced_results, context = await self.graph_retriever.enhance_results(
+                    query=query,
+                    results=results_by_source,
+                    query_type=q_type,
+                    requires_code=req_code
+                )
+                
+                if context:
+                    graph_context = context
+                    results_by_source = enhanced_results
+                    logger.info(f"Graph enhancement applied: parsed {len(context.related_entities)} entities")
+                    
+                    if inference_logger:
+                        inference_logger.log_graph_context(context)
+            except Exception as e:
+                logger.error(f"Graph enhancement failed: {e}")
+        
         results = results_by_source.get(source.value, [])
         
         # Log retrieval
@@ -969,7 +1038,7 @@ class QueryRouter:
             # For single source, also log as final results
             inference_logger.log_reranking(results, 0)
         
-        return results
+        return results, graph_context
 
 
 class UnifiedQueryEngine:
@@ -1099,7 +1168,7 @@ class UnifiedQueryEngine:
         retrieval_start = time.time()
         if len(sources_to_query) == 1:
             # Single source - direct query (no aggressive filtering needed)
-            results = await self.query_router.query_single_source(
+            results, graph_context = await self.query_router.query_single_source(
                 sources_to_query[0],
                 processed_query,
                 top_k,
@@ -1108,7 +1177,7 @@ class UnifiedQueryEngine:
             )
         else:
             # Multi-source - use stricter filtering to remove irrelevant chunks
-            results = await self.query_router.query_multi_source_with_filtering(
+            results, graph_context = await self.query_router.query_multi_source_with_filtering(
                 sources_to_query,
                 processed_query,
                 top_k=top_k,
@@ -1120,7 +1189,7 @@ class UnifiedQueryEngine:
         retrieval_time_ms = (time.time() - retrieval_start) * 1000
         
         # Step 4: Format context
-        context = self._format_context_multi_source(results)
+        context = self._format_context_multi_source(results, graph_context)
         
         # Step 5: Generate LLM response
         llm_response = None
@@ -1146,8 +1215,8 @@ class UnifiedQueryEngine:
             "llm_response": llm_response
         }
     
-    def _format_context_multi_source(self, results: List[Dict]) -> str:
-        """Format context from potentially multiple sources"""
+    def _format_context_multi_source(self, results: List[Dict], graph_context: Optional[GraphContext] = None) -> str:
+        """Format context from potentially multiple sources with graph data"""
         if not results:
             return "No relevant context found."
         
@@ -1186,6 +1255,16 @@ class UnifiedQueryEngine:
         
         # Redact any sensitive information from the context before sending to LLM
         filtered_context = redact_sensitive(raw_context)
+        
+        # Add graph context if available
+        if graph_context:
+            try:
+                graph_str_only = graph_context.to_context_string()
+                if graph_str_only:
+                    logger.info("Appending graph context to LLM prompt")
+                    filtered_context = f"## Code Relationships (from Knowledge Graph)\n{graph_str_only}\n\n## Retrieved Documentation/Code\n{filtered_context}"
+            except Exception as e:
+                logger.error(f"Error formatting graph context: {e}")
         
         return filtered_context
     

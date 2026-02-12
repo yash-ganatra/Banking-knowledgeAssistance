@@ -301,7 +301,7 @@ class GraphQuery:
     ) -> GraphQueryResult:
         """
         Get the call graph for a function/action, showing what it calls
-        and what calls it.
+        and what calls it — including relationship types.
         
         Args:
             function_name: Name of the function/action to analyze
@@ -309,52 +309,72 @@ class GraphQuery:
             include_models: Whether to include Model dependencies
             
         Returns:
-            GraphQueryResult with related entities and paths
+            GraphQueryResult with related entities, paths, and relationship triples
         """
         import time
         start = time.time()
         
         depth = min(max(depth, 1), 3)  # Clamp to 1-3
         
-        # Query for outgoing relationships (what this function calls/uses)
+        # Query outgoing: this action uses/loads/reads/writes what
         outgoing_query = """
         MATCH (a:Action {name: $name})
-        OPTIONAL MATCH path = (a)-[r:ACTION_USES_MODEL|ACTION_LOADS_VIEW|ACTION_READS_TABLE|ACTION_WRITES_TABLE*1..{depth}]->(related)
-        RETURN a, collect(distinct related) as related_entities, collect(distinct path) as paths
-        """.replace("{depth}", str(depth))
+        OPTIONAL MATCH (a)-[r:ACTION_USES_MODEL|ACTION_LOADS_VIEW|ACTION_READS_TABLE|ACTION_WRITES_TABLE]->(related)
+        RETURN a.name as source, type(r) as rel_type, 
+               related, labels(related) as target_labels
+        """
         
-        # Query for incoming relationships (what calls this function)
+        # Query incoming: what calls/posts to this action
         incoming_query = """
         MATCH (a:Action {name: $name})
-        OPTIONAL MATCH path = (caller)-[r:ROUTE_CALLS_ACTION|UI_POSTS_TO_ACTION*1..{depth}]->(a)
-        RETURN collect(distinct caller) as callers, collect(distinct path) as paths
-        """.replace("{depth}", str(depth))
+        OPTIONAL MATCH (caller)-[r:ROUTE_CALLS_ACTION|UI_POSTS_TO_ACTION|HAS_ACTION]->(a)
+        RETURN caller, labels(caller) as caller_labels, 
+               type(r) as rel_type, a.name as target
+        """
         
         entities = []
-        paths = []
+        relationships = []
         
         with self.conn.session() as session:
-            # Get outgoing
+            # Get outgoing relationships
             result = session.run(outgoing_query, name=function_name)
-            record = result.single()
-            if record:
-                for entity in record["related_entities"]:
-                    if entity:
-                        entities.append(dict(entity))
+            for record in result:
+                if record["related"] and record["rel_type"]:
+                    related_dict = dict(record["related"])
+                    target_labels = record["target_labels"] or []
+                    entity_type = target_labels[0] if target_labels else "Entity"
+                    related_dict["type"] = entity_type
+                    entities.append(related_dict)
+                    relationships.append({
+                        "source": record["source"],
+                        "source_type": "Action",
+                        "relationship": record["rel_type"],
+                        "target": related_dict.get("name", "Unknown"),
+                        "target_type": entity_type
+                    })
             
-            # Get incoming
+            # Get incoming relationships
             result = session.run(incoming_query, name=function_name)
-            record = result.single()
-            if record:
-                for caller in record["callers"]:
-                    if caller:
-                        entities.append(dict(caller))
+            for record in result:
+                if record["caller"] and record["rel_type"]:
+                    caller_dict = dict(record["caller"])
+                    caller_labels = record["caller_labels"] or []
+                    caller_type = caller_labels[0] if caller_labels else "Entity"
+                    caller_dict["type"] = caller_type
+                    entities.append(caller_dict)
+                    relationships.append({
+                        "source": caller_dict.get("name", "Unknown"),
+                        "source_type": caller_type,
+                        "relationship": record["rel_type"],
+                        "target": record["target"],
+                        "target_type": "Action"
+                    })
         
         elapsed = (time.time() - start) * 1000
         
         return GraphQueryResult(
             entities=entities,
-            paths=paths,
+            paths=relationships,  # Now contains structured relationship triples
             depth_reached=depth,
             query_time_ms=elapsed
         )
@@ -416,49 +436,108 @@ class GraphQuery:
     
     def get_related_views(self, controller_name: str) -> GraphQueryResult:
         """
-        Get all Blade views loaded by a controller's actions.
+        Get all Blade views loaded by a controller's actions,
+        including relationship triples.
         
         Args:
             controller_name: Name of the controller
             
         Returns:
-            GraphQueryResult with views and their UI elements
+            GraphQueryResult with views, elements, and relationship triples
         """
         import time
         start = time.time()
         
         query = """
-        MATCH (c:Controller {name: $name})-[:HAS_ACTION]->(a:Action)
-        OPTIONAL MATCH (a)-[:ACTION_LOADS_VIEW]->(v:BladeView)
-        OPTIONAL MATCH (v)-[:VIEW_CONTAINS_ELEMENT]->(e:UIElement)
-        OPTIONAL MATCH (e)-[:UI_POSTS_TO_ACTION]->(target:Action)
-        RETURN a, collect(distinct v) as views, 
-               collect(distinct e) as elements,
-               collect(distinct target) as targets
+        MATCH (c:Controller {name: $name})-[r1:HAS_ACTION]->(a:Action)
+        OPTIONAL MATCH (a)-[r2:ACTION_LOADS_VIEW]->(v:BladeView)
+        OPTIONAL MATCH (v)-[r3:VIEW_CONTAINS_ELEMENT]->(e:UIElement)
+        OPTIONAL MATCH (e)-[r4:UI_POSTS_TO_ACTION]->(target:Action)
+        RETURN c.name as ctrl_name, a, v, e, target,
+               type(r1) as r1_type, type(r2) as r2_type, 
+               type(r3) as r3_type, type(r4) as r4_type
         """
         
         entities = []
+        relationships = []
+        seen_entities = set()
+        seen_rels = set()
         
         with self.conn.session() as session:
             result = session.run(query, name=controller_name)
             for record in result:
+                ctrl = record["ctrl_name"]
+                
+                # Action entity
                 if record["a"]:
-                    entities.append({"type": "Action", **dict(record["a"])})
-                for v in record["views"]:
-                    if v:
-                        entities.append({"type": "BladeView", **dict(v)})
-                for e in record["elements"]:
-                    if e:
-                        entities.append({"type": "UIElement", **dict(e)})
-                for t in record["targets"]:
-                    if t:
-                        entities.append({"type": "TargetAction", **dict(t)})
+                    a_dict = {"type": "Action", **dict(record["a"])}
+                    a_name = a_dict.get("name", "")
+                    if a_name and a_name not in seen_entities:
+                        seen_entities.add(a_name)
+                        entities.append(a_dict)
+                    # Controller -> HAS_ACTION -> Action
+                    rel_key = f"{ctrl}-HAS_ACTION-{a_name}"
+                    if rel_key not in seen_rels:
+                        seen_rels.add(rel_key)
+                        relationships.append({
+                            "source": ctrl, "source_type": "Controller",
+                            "relationship": "HAS_ACTION",
+                            "target": a_name, "target_type": "Action"
+                        })
+                    
+                    # Action -> ACTION_LOADS_VIEW -> BladeView
+                    if record["v"] and record["r2_type"]:
+                        v_dict = {"type": "BladeView", **dict(record["v"])}
+                        v_name = v_dict.get("name", "")
+                        if v_name and v_name not in seen_entities:
+                            seen_entities.add(v_name)
+                            entities.append(v_dict)
+                        rel_key = f"{a_name}-ACTION_LOADS_VIEW-{v_name}"
+                        if rel_key not in seen_rels:
+                            seen_rels.add(rel_key)
+                            relationships.append({
+                                "source": a_name, "source_type": "Action",
+                                "relationship": "ACTION_LOADS_VIEW",
+                                "target": v_name, "target_type": "BladeView"
+                            })
+                        
+                        # BladeView -> VIEW_CONTAINS_ELEMENT -> UIElement
+                        if record["e"] and record["r3_type"]:
+                            e_dict = {"type": "UIElement", **dict(record["e"])}
+                            e_name = e_dict.get("name", e_dict.get("html_id", ""))
+                            if e_name and e_name not in seen_entities:
+                                seen_entities.add(e_name)
+                                entities.append(e_dict)
+                            rel_key = f"{v_name}-VIEW_CONTAINS_ELEMENT-{e_name}"
+                            if rel_key not in seen_rels:
+                                seen_rels.add(rel_key)
+                                relationships.append({
+                                    "source": v_name, "source_type": "BladeView",
+                                    "relationship": "VIEW_CONTAINS_ELEMENT",
+                                    "target": e_name, "target_type": "UIElement"
+                                })
+                            
+                            # UIElement -> UI_POSTS_TO_ACTION -> TargetAction
+                            if record["target"] and record["r4_type"]:
+                                t_dict = {"type": "TargetAction", **dict(record["target"])}
+                                t_name = t_dict.get("name", "")
+                                if t_name and t_name not in seen_entities:
+                                    seen_entities.add(t_name)
+                                    entities.append(t_dict)
+                                rel_key = f"{e_name}-UI_POSTS_TO_ACTION-{t_name}"
+                                if rel_key not in seen_rels:
+                                    seen_rels.add(rel_key)
+                                    relationships.append({
+                                        "source": e_name, "source_type": "UIElement",
+                                        "relationship": "UI_POSTS_TO_ACTION",
+                                        "target": t_name, "target_type": "TargetAction"
+                                    })
         
         elapsed = (time.time() - start) * 1000
         
         return GraphQueryResult(
             entities=entities,
-            paths=[],
+            paths=relationships,
             depth_reached=3,
             query_time_ms=elapsed
         )
