@@ -15,7 +15,7 @@ Key Features:
 import logging
 import re
 from typing import Dict, List, Optional, Any, Tuple, Set
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -38,6 +38,7 @@ class GraphContext:
     relationships: List[Dict[str, Any]]  # Explicit relationship triples: source → type → target
     traversal_depth: int
     query_time_ms: float
+    cypher_queries: List[str] = field(default_factory=list)  # Cypher queries executed
     
     def to_context_string(self) -> str:
         """
@@ -75,18 +76,34 @@ class GraphContext:
                 parts.append(f"- Models: {', '.join(model_names)}")
         
         if self.related_entities:
-            # Group by type
-            by_type: Dict[str, List[str]] = {}
-            for entity in self.related_entities[:10]:  # Limit
-                entity_type = entity.get("type", entity.get("labels", ["Entity"])[0] if isinstance(entity.get("labels"), list) else "Entity")
-                name = entity.get("name", "Unknown")
-                if entity_type not in by_type:
-                    by_type[entity_type] = []
-                by_type[entity_type].append(name)
+            # Check if any entities have call_count (analytics query result)
+            has_call_counts = any(e.get("call_count") is not None for e in self.related_entities)
             
-            parts.append("\n### Related Entities:")
-            for entity_type, names in by_type.items():
-                parts.append(f"- {entity_type}s: {', '.join(f'`{n}`' for n in names[:5])}")
+            if has_call_counts:
+                # Format as ranked call count table for analytics queries
+                parts.append("\n### Function Call Frequency (sorted by most called):")
+                for entity in self.related_entities[:50]:
+                    name = entity.get("name", "Unknown")
+                    call_count = entity.get("call_count", 0)
+                    callers = entity.get("callers", [])
+                    caller_info = ""
+                    if callers:
+                        caller_names = [f"`{c.get('name', '?')}`" for c in callers[:5]]
+                        caller_info = f" (called by: {', '.join(caller_names)})"
+                    parts.append(f"- `{name}`: **{call_count} calls**{caller_info}")
+            else:
+                # Standard entity listing
+                by_type: Dict[str, List[str]] = {}
+                for entity in self.related_entities[:50]:  # Generous limit for file listings
+                    entity_type = entity.get("type", entity.get("labels", ["Entity"])[0] if isinstance(entity.get("labels"), list) else "Entity")
+                    name = entity.get("name", "Unknown")
+                    if entity_type not in by_type:
+                        by_type[entity_type] = []
+                    by_type[entity_type].append(name)
+                
+                parts.append("\n### Related Entities:")
+                for entity_type, names in by_type.items():
+                    parts.append(f"- {entity_type}s: {', '.join(f'`{n}`' for n in names[:50])}")
         
         return "\n".join(parts) if parts else ""
 
@@ -98,7 +115,8 @@ class GraphContext:
             "route_flow": self.route_flow,
             "relationships": self.relationships,
             "traversal_depth": self.traversal_depth,
-            "query_time_ms": self.query_time_ms
+            "query_time_ms": self.query_time_ms,
+            "cypher_queries": self.cypher_queries
         }
 
 
@@ -308,6 +326,35 @@ class GraphEnhancedRetriever:
         call_graph = []
         all_relationships = []
         route_flow = None
+        cypher_queries = []  # Track all Cypher queries executed
+        file_query_handled = False  # Skip call graph traversal if file query already answered
+        
+        # Check if query mentions a specific PHP file
+        file_match = re.search(r'\b([\w]+\.php)\b', query, re.IGNORECASE)
+        if file_match:
+            file_name = file_match.group(1)
+            file_query_handled = True  # File-specific query — skip per-entity call graph traversal
+            
+            # Detect analytical queries (e.g., "most called", "frequently used")
+            analytics_keywords = r'(most\s+called|most\s+used|maximum|frequently|how\s+many\s+times|call\s+count|usage\s+frequency|popular|least\s+called|least\s+used)'
+            is_analytics_query = bool(re.search(analytics_keywords, query, re.IGNORECASE))
+            
+            try:
+                if is_analytics_query:
+                    # Use analytics query with call counts
+                    file_result = self.query_builder.get_most_called_in_file(file_name)
+                    logger.info(f"Analytics query: ranked {len(file_result.entities)} functions by call count in '{file_name}'")
+                else:
+                    # Use basic file query
+                    file_result = self.query_builder.get_actions_by_file(file_name)
+                    logger.info(f"File query: found {len(file_result.entities)} entities in '{file_name}'")
+                
+                if file_result.entities:
+                    related_entities.extend(file_result.entities)
+                    all_relationships.extend(file_result.paths)
+                cypher_queries.extend(file_result.cypher_queries)
+            except Exception as e:
+                logger.warning(f"File-based graph query failed for '{file_name}': {e}")
         
         # Check if query mentions a route pattern
         route_match = re.search(r'/[\w/{}]+', query)
@@ -318,33 +365,38 @@ class GraphEnhancedRetriever:
                 if flow_result.entities:
                     route_flow = self._format_route_flow(flow_result.entities)
                     related_entities.extend(flow_result.entities)
+                cypher_queries.extend(flow_result.cypher_queries)
             except Exception as e:
                 logger.warning(f"Route flow query failed: {e}")
         
         # Query call graph for each action/function entity
-        for entity_name, entity_type in entities:
-            if entity_type in ["Action", "detected"]:
-                try:
-                    graph_result = self.query_builder.get_function_call_graph(
-                        entity_name,
-                        depth=max_depth
-                    )
-                    call_graph.extend(graph_result.entities)
-                    # Collect relationship triples from paths
-                    if graph_result.paths:
-                        all_relationships.extend(graph_result.paths)
-                except Exception as e:
-                    logger.debug(f"Call graph query failed for {entity_name}: {e}")
-            
-            elif entity_type in ["Controller", "Class"] and entity_name.endswith("Controller"):
-                try:
-                    views_result = self.query_builder.get_related_views(entity_name)
-                    related_entities.extend(views_result.entities)
-                    # Collect relationship triples from paths
-                    if views_result.paths:
-                        all_relationships.extend(views_result.paths)
-                except Exception as e:
-                    logger.debug(f"Related views query failed for {entity_name}: {e}")
+        # Skip if file query already provided complete results (avoids redundant traversals)
+        if not file_query_handled:
+            for entity_name, entity_type in entities:
+                if entity_type in ["Action", "detected"]:
+                    try:
+                        graph_result = self.query_builder.get_function_call_graph(
+                            entity_name,
+                            depth=max_depth
+                        )
+                        call_graph.extend(graph_result.entities)
+                        # Collect relationship triples from paths
+                        if graph_result.paths:
+                            all_relationships.extend(graph_result.paths)
+                        cypher_queries.extend(graph_result.cypher_queries)
+                    except Exception as e:
+                        logger.debug(f"Call graph query failed for {entity_name}: {e}")
+                
+                elif entity_type in ["Controller", "Class"] and entity_name.endswith("Controller"):
+                    try:
+                        views_result = self.query_builder.get_related_views(entity_name)
+                        related_entities.extend(views_result.entities)
+                        # Collect relationship triples from paths
+                        if views_result.paths:
+                            all_relationships.extend(views_result.paths)
+                        cypher_queries.extend(views_result.cypher_queries)
+                    except Exception as e:
+                        logger.debug(f"Related views query failed for {entity_name}: {e}")
         
         # Deduplicate entities by id
         seen_ids = set()
@@ -367,12 +419,13 @@ class GraphEnhancedRetriever:
         elapsed = (time.time() - start) * 1000
         
         return GraphContext(
-            related_entities=unique_entities[:self.config.max_related_entities],
+            related_entities=unique_entities[:max(self.config.max_related_entities, len(unique_entities))],
             call_graph=call_graph[:5],
             route_flow=route_flow,
             relationships=unique_rels,
             traversal_depth=max_depth,
-            query_time_ms=elapsed
+            query_time_ms=elapsed,
+            cypher_queries=cypher_queries
         )
     
     def _format_route_flow(self, entities: List[Dict[str, Any]]) -> Dict[str, Any]:

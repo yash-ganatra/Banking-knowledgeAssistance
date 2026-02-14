@@ -52,6 +52,7 @@ class GraphQueryResult:
     paths: List[List[str]]  # Traversal paths taken
     depth_reached: int
     query_time_ms: float
+    cypher_queries: List[str] = field(default_factory=list)  # Cypher queries executed
 
 
 # =============================================================================
@@ -68,6 +69,7 @@ class GraphSchema:
     NODE_LABELS = {
         "Route": ["id", "uri", "method", "middleware", "file"],
         "Controller": ["id", "name", "namespace", "file"],
+        "HelperClass": ["id", "name", "file", "parent_class", "type"],
         "Action": ["id", "name", "visibility", "start_line", "end_line", "controller_id"],
         "Model": ["id", "name", "table", "file"],
         "BladeView": ["id", "name", "file"],
@@ -80,7 +82,7 @@ class GraphSchema:
     # Relationship types with (from_label, to_label)
     RELATIONSHIP_TYPES = {
         "ROUTE_CALLS_ACTION": ("Route", "Action"),
-        "HAS_ACTION": ("Controller", "Action"),
+        "HAS_ACTION": ("Controller", "Action"),  # Also used for HelperClass -> Action
         "ACTION_LOADS_VIEW": ("Action", "BladeView"),
         "ACTION_USES_MODEL": ("Action", "Model"),
         "ACTION_READS_TABLE": ("Action", "DBTable"),
@@ -91,6 +93,7 @@ class GraphSchema:
         "VIEW_INCLUDES_JS": ("BladeView", "JSFunction"),
         "JS_VALIDATES_ELEMENT": ("JSFunction", "UIElement"),
         "UI_POSTS_TO_ACTION": ("UIElement", "Action"),
+        "ACTION_CALLS_ACTION": ("Action", "Action"),
     }
     
     @classmethod
@@ -128,7 +131,7 @@ class GraphSchema:
             )
         
         # Create fulltext index for searching across all code entities
-        fulltext_labels = ["Controller", "Action", "Model", "BladeView", "JSFunction"]
+        fulltext_labels = ["Controller", "HelperClass", "Action", "Model", "BladeView", "JSFunction"]
         queries.append(
             f"CREATE FULLTEXT INDEX code_entity_search IF NOT EXISTS "
             f"FOR (n:{':'.join(fulltext_labels)}) ON EACH [n.name, n.file]"
@@ -376,7 +379,8 @@ class GraphQuery:
             entities=entities,
             paths=relationships,  # Now contains structured relationship triples
             depth_reached=depth,
-            query_time_ms=elapsed
+            query_time_ms=elapsed,
+            cypher_queries=[outgoing_query.strip(), incoming_query.strip()]
         )
     
     def get_route_flow(self, route_uri: str) -> GraphQueryResult:
@@ -431,7 +435,8 @@ class GraphQuery:
             entities=entities,
             paths=[],
             depth_reached=4,  # Fixed depth for route flow
-            query_time_ms=elapsed
+            query_time_ms=elapsed,
+            cypher_queries=[query.strip()]
         )
     
     def get_related_views(self, controller_name: str) -> GraphQueryResult:
@@ -539,7 +544,8 @@ class GraphQuery:
             entities=entities,
             paths=relationships,
             depth_reached=3,
-            query_time_ms=elapsed
+            query_time_ms=elapsed,
+            cypher_queries=[query.strip()]
         )
     
     def find_entities_by_name(
@@ -635,6 +641,175 @@ class GraphQuery:
                 })
         
         return neighbors
+    
+    def get_actions_by_file(
+        self,
+        file_pattern: str,
+        limit: int = 100
+    ) -> 'GraphQueryResult':
+        """
+        Get all actions/functions defined in a specific file.
+        
+        Args:
+            file_pattern: Filename or partial path to match (e.g., 'Api.php')
+            limit: Maximum results
+            
+        Returns:
+            GraphQueryResult with all actions in the file
+        """
+        import time
+        start = time.time()
+        
+        # Query both Controller and HelperClass nodes
+        # Use toLower() + ENDS WITH for case-insensitive filename matching
+        # e.g. 'Api.php' matches 'app/Helpers/Api.php' but NOT 'AmendApi.php'
+        query = """
+        MATCH (parent)-[:HAS_ACTION]->(a:Action)
+        WHERE (parent:Controller OR parent:HelperClass)
+          AND toLower(parent.file) ENDS WITH ('/' + toLower($pattern))
+        RETURN parent.name as class_name, parent.file as file_path,
+               labels(parent) as parent_labels,
+               collect({name: a.name, id: a.id, params: a.params,
+                       visibility: a.visibility, start_line: a.start_line}) as actions
+        """
+        
+        entities = []
+        relationships = []
+        
+        with self.conn.session() as session:
+            result = session.run(query, pattern=file_pattern)
+            for record in result:
+                class_name = record["class_name"]
+                file_path = record["file_path"]
+                parent_labels = record["parent_labels"] or []
+                parent_type = parent_labels[0] if parent_labels else "Class"
+                
+                # Add the parent class as an entity
+                entities.append({
+                    "type": parent_type,
+                    "name": class_name,
+                    "file": file_path
+                })
+                
+                # Add each action as an entity
+                for action in record["actions"]:
+                    entities.append({
+                        "type": "Action",
+                        "name": action["name"],
+                        "id": action["id"],
+                        "params": action.get("params", ""),
+                        "visibility": action.get("visibility", "public"),
+                        "start_line": action.get("start_line")
+                    })
+                    relationships.append({
+                        "source": class_name,
+                        "source_type": parent_type,
+                        "relationship": "HAS_ACTION",
+                        "target": action["name"],
+                        "target_type": "Action"
+                    })
+        
+        elapsed = (time.time() - start) * 1000
+        
+        return GraphQueryResult(
+            entities=entities,
+            paths=relationships,
+            depth_reached=1,
+            query_time_ms=elapsed,
+            cypher_queries=[query.strip()]
+        )
+
+    def get_most_called_in_file(
+        self,
+        file_pattern: str,
+        limit: int = 50
+    ) -> 'GraphQueryResult':
+        """
+        Get all functions in a file ranked by how many times they are called.
+        
+        Counts incoming ROUTE_CALLS_ACTION and UI_POSTS_TO_ACTION relationships
+        to determine usage frequency.
+        
+        Args:
+            file_pattern: Filename to match (e.g., 'ComonFunctions.php')
+            limit: Maximum results
+            
+        Returns:
+            GraphQueryResult with functions sorted by call count (descending)
+        """
+        import time
+        start = time.time()
+        
+        query = """
+        MATCH (parent)-[:HAS_ACTION]->(a:Action)
+        WHERE (parent:Controller OR parent:HelperClass)
+          AND toLower(parent.file) ENDS WITH ('/' + toLower($pattern))
+        OPTIONAL MATCH (caller)-[r:ROUTE_CALLS_ACTION|UI_POSTS_TO_ACTION|ACTION_CALLS_ACTION]->(a)
+        WITH a, parent, count(r) AS call_count,
+             collect(DISTINCT CASE WHEN caller IS NOT NULL 
+                     THEN {name: caller.name, type: labels(caller)[0], rel_type: type(r)} 
+                     END) AS callers
+        RETURN a.name AS function_name, a.id AS action_id,
+               parent.name AS class_name, parent.file AS file_path,
+               a.params AS params, a.visibility AS visibility,
+               call_count,
+               [c IN callers WHERE c IS NOT NULL] AS callers
+        ORDER BY call_count DESC
+        LIMIT $limit
+        """
+        
+        entities = []
+        relationships = []
+        
+        with self.conn.session() as session:
+            result = session.run(query, pattern=file_pattern, limit=limit)
+            for record in result:
+                class_name = record["class_name"]
+                function_name = record["function_name"]
+                call_count = record["call_count"]
+                callers = record["callers"] or []
+                
+                entities.append({
+                    "type": "Action",
+                    "name": function_name,
+                    "id": record["action_id"],
+                    "class_name": class_name,
+                    "file": record["file_path"],
+                    "params": record.get("params", ""),
+                    "visibility": record.get("visibility", "public"),
+                    "call_count": call_count,
+                    "callers": [dict(c) for c in callers if c]
+                })
+                
+                # Add HAS_ACTION relationship
+                relationships.append({
+                    "source": class_name,
+                    "source_type": "HelperClass",
+                    "relationship": "HAS_ACTION",
+                    "target": function_name,
+                    "target_type": "Action"
+                })
+                
+                # Add caller relationships
+                for caller in callers:
+                    if caller:
+                        relationships.append({
+                            "source": caller.get("name", "Unknown"),
+                            "source_type": caller.get("type", "Entity"),
+                            "relationship": caller.get("rel_type", "CALLS"),
+                            "target": function_name,
+                            "target_type": "Action"
+                        })
+        
+        elapsed = (time.time() - start) * 1000
+        
+        return GraphQueryResult(
+            entities=entities,
+            paths=relationships,
+            depth_reached=1,
+            query_time_ms=elapsed,
+            cypher_queries=[query.strip()]
+        )
 
 
 # =============================================================================

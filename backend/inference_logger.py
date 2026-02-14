@@ -234,7 +234,7 @@ class InferenceLogger:
             self.current_log.sources_queried = sources
 
     def log_graph_context(self, context: Any) -> None:
-        """Log graph enhancement context"""
+        """Log graph enhancement context including Cypher queries"""
         if self.current_log and context:
             self.current_log.graph_used = True
             # Convert context object to dict if needed
@@ -251,6 +251,14 @@ class InferenceLogger:
                     }
                 except:
                     self.current_log.graph_context = {"raw": str(context)}
+            
+            # Always capture Cypher queries if available
+            cypher_queries = getattr(context, "cypher_queries", [])
+            if cypher_queries:
+                if self.current_log.graph_context is None:
+                    self.current_log.graph_context = {}
+                self.current_log.graph_context["cypher_queries"] = cypher_queries
+                logger.info(f"Graph context logged with {len(cypher_queries)} Cypher queries")
     
     def log_initial_retrieval(
         self,

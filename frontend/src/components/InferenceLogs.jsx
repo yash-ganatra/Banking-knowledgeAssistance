@@ -123,6 +123,25 @@ const PipelineStage = ({ stage, isLast }) => {
               </div>
             </div>
 
+            {/* Cypher Queries */}
+            {stage.graph_context.cypher_queries?.length > 0 && (
+              <div className="bg-gray-900/60 rounded-lg p-3 border border-yellow-500/20">
+                <div className="text-[10px] text-yellow-400 uppercase tracking-wider font-semibold mb-2">
+                  Cypher Queries Executed ({stage.graph_context.cypher_queries.length})
+                </div>
+                <div className="space-y-2">
+                  {stage.graph_context.cypher_queries.map((query, idx) => (
+                    <pre
+                      key={idx}
+                      className="text-xs text-yellow-200/90 font-mono bg-gray-950/80 p-2.5 rounded border border-yellow-500/10 overflow-x-auto whitespace-pre-wrap"
+                    >
+                      {query}
+                    </pre>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Route Flow (if present) */}
             {stage.graph_context.route_flow && (
               <div className="bg-gray-900/60 rounded-lg p-3 border border-indigo-500/20">
