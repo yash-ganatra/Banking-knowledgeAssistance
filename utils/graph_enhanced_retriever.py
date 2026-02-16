@@ -383,19 +383,24 @@ class GraphEnhancedRetriever:
         route_match = re.search(r'/[\w/{}]+', query)
         if route_match:
             route_uri = route_match.group()
+            file_query_handled = True  # Route query provides complete flow — skip entity traversal
             try:
                 flow_result = self.query_builder.get_route_flow(route_uri)
                 if flow_result.entities:
                     route_flow = self._format_route_flow(flow_result.entities)
                     related_entities.extend(flow_result.entities)
                 cypher_queries.extend(flow_result.cypher_queries)
+                logger.info(f"Route flow query: found {len(flow_result.entities)} entities for '{route_uri}'")
             except Exception as e:
                 logger.warning(f"Route flow query failed: {e}")
         
         # Query call graph for each action/function entity
-        # Skip if file query already provided complete results (avoids redundant traversals)
+        # Skip if file query or route query already provided complete results (avoids redundant traversals)
+        # ALSO: Limit to top 3 entities to prevent query explosion
         if not file_query_handled:
-            for entity_name, entity_type in entities:
+            entities_list = list(entities)[:3]  # Limit to top 3 entities
+            logger.info(f"Querying graph for {len(entities_list)} entities (limited from {len(entities)} extracted)")
+            for entity_name, entity_type in entities_list:
                 if entity_type in ["Action", "detected"]:
                     try:
                         graph_result = self.query_builder.get_function_call_graph(

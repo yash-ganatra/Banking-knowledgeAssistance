@@ -28,6 +28,8 @@ try:
     from parsers.controller_parser import ControllerParser
     from parsers.blade_parser import BladeParser
     from parsers.helper_parser import HelperParser
+    from parsers.ui_element_parser import UIElementParser
+    from parsers.js_parser import JSParser
 except ImportError as e:
     print(f"Error importing parsers: {e}")
     sys.exit(1)
@@ -82,13 +84,22 @@ def main():
     controller_parser = ControllerParser(laravel_root)
     blade_parser = BladeParser(laravel_root)
     helper_parser = HelperParser(laravel_root)
+    ui_parser = UIElementParser(laravel_root)
+    js_parser = JSParser(laravel_root)
     
     routes = route_parser.parse()
     controllers = controller_parser.parse()
     views = blade_parser.parse()
     helpers = helper_parser.parse()
+    ui_data = ui_parser.parse()
+    js_data = js_parser.parse()
+    
+    # Get View→JS includes
+    views_path = laravel_root / "resources/views"
+    view_js_includes = js_parser.parse_blade_js_includes(views_path)
     
     logger.info(f"Parsed {len(routes)} routes, {len(controllers)} controllers, {len(views)} views, {len(helpers)} helpers")
+    logger.info(f"Parsed {len(ui_data['elements'])} UI elements, {len(js_data['functions'])} JS functions")
     
     # 3. Prepare Nodes
     # We need to assign IDs to everything to create relationships later.
@@ -201,6 +212,37 @@ def main():
             "name": v["name"],
             "file": v["file"]
         })
+    
+    # Process UI Elements
+    ui_element_nodes = []
+    for el in ui_data["elements"]:
+        # Element already has 'id' in format view_name:type:element_id
+        ui_element_nodes.append({
+            "id": el["id"],
+            "type": el["type"],
+            "name": el.get("name", ""),
+            "view_name": el.get("view_name", ""),
+            "html_id": el.get("html_id", ""),
+            "action": el.get("action", ""),
+            "method": el.get("method", ""),
+            "text": el.get("text", "")[:100] if el.get("text") else "",  # Truncate long text
+            "target_route": el.get("target_route", "")
+        })
+    logger.info(f"Prepared {len(ui_element_nodes)} UI element nodes")
+    
+    # Process JS Functions
+    js_function_nodes = []
+    for fn in js_data["functions"]:
+        # Use the ID from the parser (format: file_basename:function_name)
+        js_function_nodes.append({
+            "id": fn["id"],  # e.g., "financial_details:checkFinancialFields"
+            "name": fn["name"],
+            "file": fn["file"],
+            "type": fn["type"],
+            "params": fn.get("params", ""),
+            "line": fn.get("line", 0)
+        })
+    logger.info(f"Prepared {len(js_function_nodes)} JS function nodes")
         
     # 4. Load Nodes
     logger.info("Loading Nodes into Neo4j...")
@@ -211,6 +253,8 @@ def main():
     loader.load_nodes_batch(view_nodes, "BladeView")
     loader.load_nodes_batch(model_nodes, "Model")
     loader.load_nodes_batch(table_nodes, "DBTable")
+    loader.load_nodes_batch(ui_element_nodes, "UIElement")
+    loader.load_nodes_batch(js_function_nodes, "JSFunction")
     
     # 5. Prepare and Load Relationships
     logger.info("Loading Relationships...")
@@ -342,6 +386,65 @@ def main():
     
     loader.load_relationships_batch(rels_action_calls_action, "ACTION_CALLS_ACTION", "Action", "Action")
     logger.info(f"Created {len(rels_action_calls_action)} ACTION_CALLS_ACTION relationships")
+    
+    # VIEW_CONTAINS_ELEMENT (BladeView -> UIElement)
+    # ui_data["view_contains_element"] is a list of tuples (view_name, element_id)
+    rels_view_element = ui_data["view_contains_element"]  # Already in (view_id, element_id) format
+    
+    loader.load_relationships_batch(rels_view_element, "VIEW_CONTAINS_ELEMENT", "BladeView", "UIElement")
+    logger.info(f"Created {len(rels_view_element)} VIEW_CONTAINS_ELEMENT relationships")
+    
+    # UI_POSTS_TO_ACTION (UIElement -> Action)
+    # ui_data["ui_posts_to_action"] is a list of tuples (element_id, target_route)
+    rels_ui_action = []
+    for (el_id, target) in ui_data["ui_posts_to_action"]:
+        # The target is typically a route name (e.g., 'password.reset')
+        # Try to find matching action from routes
+        action_found = False
+        for r in routes:
+            # Check if route name matches
+            route_name = r.get("name", "")
+            if target == route_name or target == f"/{r['uri']}" or target == r["uri"]:
+                action_id = f"{r['controller']}@{r['action']}"
+                rels_ui_action.append((el_id, action_id))
+                action_found = True
+                break
+        
+        # If not found in routes, check if it's already in Controller@action format
+        if not action_found and "@" in target:
+            rels_ui_action.append((el_id, target))
+    
+    loader.load_relationships_batch(rels_ui_action, "UI_POSTS_TO_ACTION", "UIElement", "Action")
+    logger.info(f"Created {len(rels_ui_action)} UI_POSTS_TO_ACTION relationships")
+    
+    # VIEW_INCLUDES_JS (BladeView -> JSFunction)
+    # view_js_includes is a list of (view_name, js_base_name) tuples
+    # We need to match by js_base_name (e.g., 'bank' matches functions from 'bank.js')
+    rels_view_js = []
+    
+    # Create a lookup: js_base_name -> list of function ids
+    js_file_to_functions = {}
+    for fn in js_data["functions"]:
+        # fn["file"] is like "public/js/bank.js" or just the relative path
+        # Extract base name from it
+        file_str = str(fn["file"])
+        if "/" in file_str:
+            js_base = file_str.split("/")[-1].replace(".js", "")
+        else:
+            js_base = file_str.replace(".js", "")
+        
+        if js_base not in js_file_to_functions:
+            js_file_to_functions[js_base] = []
+        js_file_to_functions[js_base].append(fn["id"])
+    
+    # Build relationships: view -> all functions from included JS file
+    for (view_name, js_base_name) in view_js_includes:
+        if js_base_name in js_file_to_functions:
+            for fn_id in js_file_to_functions[js_base_name]:
+                rels_view_js.append((view_name, fn_id))
+    
+    loader.load_relationships_batch(rels_view_js, "VIEW_INCLUDES_JS", "BladeView", "JSFunction")
+    logger.info(f"Created {len(rels_view_js)} VIEW_INCLUDES_JS relationships")
     
     logger.info(f"Build complete in {time.time() - start_time:.2f} seconds")
     conn.close()

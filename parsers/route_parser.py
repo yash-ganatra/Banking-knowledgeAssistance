@@ -26,7 +26,7 @@ class RouteParser:
         routes = []
         
         # Files to parse
-        route_files = ["web.php", "api.php"]
+        route_files = ["web.php", "api.php", "channels.php", "console.php"]
         
         for filename in route_files:
             file_path = self.routes_path / filename
@@ -51,19 +51,22 @@ class RouteParser:
         # And string based 'uri', 'Action' (less common in modern Laravel but possible)
         
         # Pattern 1: Route::get('uri', [Controller::class, 'method'])
+        # Supports full namespaces like App\Http\Controllers\HomeController::class
         pattern_array = re.compile(
-            r"Route::(get|post|put|patch|delete|any|match)\s*\(\s*['\"]([^'\"]+)['\"]\s*,\s*\[\s*([a-zA-Z0-9_]+)::class\s*,\s*['\"]([^'\"]+)['\"]\s*\]",
+            r"Route::(get|post|put|patch|delete|any|match)\s*\(\s*['\"]([^'\"]+)['\"]\s*,\s*\[\s*([\\a-zA-Z0-9_]+)::class\s*,\s*['\"]([^'\"]+)['\"]\s*\]",
             re.IGNORECASE
         )
         
         # Pattern 2: Route::get('uri', 'Controller@method')
+        # Supports full namespaces like App\Http\Controllers\HomeController@method
         pattern_string = re.compile(
-            r"Route::(get|post|put|patch|delete|any|match)\s*\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([a-zA-Z0-9_]+)@([a-zA-Z0-9_]+)['\"]",
+            r"Route::(get|post|put|patch|delete|any|match)\s*\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([\\a-zA-Z0-9_]+)@([a-zA-Z0-9_]+)['\"]",
             re.IGNORECASE
         )
 
         for match in pattern_array.finditer(content):
             method, uri, controller, action = match.groups()
+            controller = controller.split("\\")[-1]
             routes.append({
                 "method": method.upper(),
                 "uri": uri,
@@ -75,6 +78,7 @@ class RouteParser:
 
         for match in pattern_string.finditer(content):
             method, uri, controller, action = match.groups()
+            controller = controller.split("\\")[-1]
             routes.append({
                 "method": method.upper(),
                 "uri": uri,
