@@ -625,7 +625,8 @@ class QueryRouter:
                  use_hybrid_search: bool = True,
                  bm25_index_dir: str = None,
                  use_graph_enhancement: bool = True,
-                 neo4j_uri: str = None):
+                 neo4j_uri: str = None,
+                 groq_api_key: str = None):
         """
         Initialize with all available query engines
         
@@ -639,6 +640,7 @@ class QueryRouter:
             bm25_index_dir: Directory containing BM25 indices
             use_graph_enhancement: Whether to use graph context
             neo4j_uri: Optional Neo4j URI
+            groq_api_key: Optional Groq API key for Text-to-Cypher
         """
         self.engines = {
             KnowledgeSource.BUSINESS_DOCS: business_engine,
@@ -655,7 +657,8 @@ class QueryRouter:
                 self.graph_retriever = create_graph_enhanced_retriever(
                     neo4j_uri=neo4j_uri,
                     mode="code_queries_only",  # Default to code/flow queries
-                    graph_weight=0.4
+                    graph_weight=0.4,
+                    groq_api_key=groq_api_key
                 )
                 logger.info("GraphEnhancedRetriever initialized")
             except Exception as e:
@@ -917,7 +920,10 @@ class QueryRouter:
                 if context:
                     graph_context = context
                     results_by_source = enhanced_results
-                    logger.info(f"Graph enhancement applied: parsed {len(context.related_entities)} entities")
+                    if context.cypher_analytics_text:
+                        logger.info(f"Graph enhancement applied: TextToCypher analytics (cypher_queries={len(context.cypher_queries)})")
+                    else:
+                        logger.info(f"Graph enhancement applied: parsed {len(context.related_entities)} entities")
                     
                     if inference_logger:
                         inference_logger.log_graph_context(context)

@@ -719,6 +719,100 @@ class GraphQuery:
             cypher_queries=[query.strip()]
         )
 
+    def get_most_used_tables(
+        self,
+        limit: int = 20
+    ) -> 'GraphQueryResult':
+        """
+        Get database tables ranked by how many actions read/write them.
+        
+        Counts incoming ACTION_READS_TABLE and ACTION_WRITES_TABLE relationships.
+        
+        Args:
+            limit: Maximum results
+            
+        Returns:
+            GraphQueryResult with tables sorted by usage count (descending)
+        """
+        import time
+        start = time.time()
+        
+        query = """
+        MATCH (t:DBTable)
+        OPTIONAL MATCH (reader)-[r:ACTION_READS_TABLE]->(t)
+        OPTIONAL MATCH (writer)-[w:ACTION_WRITES_TABLE]->(t)
+        WITH t,
+             count(DISTINCT r) AS read_count,
+             count(DISTINCT w) AS write_count,
+             count(DISTINCT r) + count(DISTINCT w) AS total_usage,
+             collect(DISTINCT CASE WHEN reader IS NOT NULL
+                     THEN {name: reader.name, type: 'read'}
+                     END) AS readers,
+             collect(DISTINCT CASE WHEN writer IS NOT NULL
+                     THEN {name: writer.name, type: 'write'}
+                     END) AS writers
+        WHERE total_usage > 0
+        RETURN t.id AS table_name,
+               read_count, write_count, total_usage,
+               [r IN readers WHERE r IS NOT NULL] AS readers,
+               [w IN writers WHERE w IS NOT NULL] AS writers
+        ORDER BY total_usage DESC
+        LIMIT $limit
+        """
+        
+        entities = []
+        relationships = []
+        
+        with self.conn.session() as session:
+            result = session.run(query, limit=limit)
+            for record in result:
+                table_name = record["table_name"]
+                read_count = record["read_count"]
+                write_count = record["write_count"]
+                total_usage = record["total_usage"]
+                readers = record["readers"] or []
+                writers = record["writers"] or []
+                
+                entities.append({
+                    "type": "DBTable",
+                    "name": table_name,
+                    "read_count": read_count,
+                    "write_count": write_count,
+                    "total_usage": total_usage,
+                    "readers": [dict(r) for r in readers if r],
+                    "writers": [dict(w) for w in writers if w],
+                })
+                
+                for reader in readers:
+                    if reader:
+                        relationships.append({
+                            "source": reader.get("name", "Unknown"),
+                            "source_type": "Action",
+                            "relationship": "ACTION_READS_TABLE",
+                            "target": table_name,
+                            "target_type": "DBTable"
+                        })
+                
+                for writer in writers:
+                    if writer:
+                        relationships.append({
+                            "source": writer.get("name", "Unknown"),
+                            "source_type": "Action",
+                            "relationship": "ACTION_WRITES_TABLE",
+                            "target": table_name,
+                            "target_type": "DBTable"
+                        })
+        
+        elapsed = (time.time() - start) * 1000
+        
+        return GraphQueryResult(
+            entities=entities,
+            paths=relationships,
+            depth_reached=1,
+            query_time_ms=elapsed,
+            cypher_queries=[query.strip()]
+        )
+
     def get_most_called_in_file(
         self,
         file_pattern: str,

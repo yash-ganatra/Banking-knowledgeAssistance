@@ -99,9 +99,15 @@ const PipelineStage = ({ stage, isLast }) => {
             <div className="flex items-center justify-between">
               <div className="text-xs font-semibold text-purple-300 flex items-center gap-2">
                 <span>🕸️ Graph Context</span>
-                <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] border border-purple-500/30">
-                  {stage.graph_context.related_entities?.length || 0} entities
-                </span>
+                {stage.graph_context.cypher_analytics_text ? (
+                  <span className="px-1.5 py-0.5 rounded bg-green-500/20 text-green-300 text-[10px] border border-green-500/30">
+                    ✨ TextToCypher
+                  </span>
+                ) : (
+                  <span className="px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-300 text-[10px] border border-purple-500/30">
+                    {stage.graph_context.related_entities?.length || 0} entities
+                  </span>
+                )}
                 {stage.graph_context.call_graph?.length > 0 && (
                   <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 text-[10px] border border-cyan-500/30">
                     {stage.graph_context.call_graph.length} in call graph
@@ -139,6 +145,18 @@ const PipelineStage = ({ stage, isLast }) => {
                     </pre>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* TextToCypher Analytics Results */}
+            {stage.graph_context.cypher_analytics_text && (
+              <div className="bg-gray-900/60 rounded-lg p-3 border border-green-500/20">
+                <div className="text-[10px] text-green-400 uppercase tracking-wider font-semibold mb-2">
+                  Graph Analytics Results
+                </div>
+                <pre className="text-xs text-green-200/90 font-mono bg-gray-950/80 p-2.5 rounded border border-green-500/10 overflow-x-auto whitespace-pre-wrap">
+                  {stage.graph_context.cypher_analytics_text}
+                </pre>
               </div>
             )}
 

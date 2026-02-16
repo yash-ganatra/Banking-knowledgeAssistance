@@ -39,6 +39,7 @@ class GraphContext:
     traversal_depth: int
     query_time_ms: float
     cypher_queries: List[str] = field(default_factory=list)  # Cypher queries executed
+    cypher_analytics_text: Optional[str] = None  # Pre-formatted text from TextToCypher
     
     def to_context_string(self) -> str:
         """
@@ -47,14 +48,19 @@ class GraphContext:
         Returns:
             Formatted context string showing relationships
         """
-        if not self.related_entities and not self.call_graph:
+        if not self.related_entities and not self.call_graph and not self.cypher_analytics_text:
             return ""
         
         parts = []
         
+        # If TextToCypher produced formatted results, use them directly
+        if self.cypher_analytics_text:
+            parts.append(self.cypher_analytics_text)
+            return "\n".join(parts)
+        
         if self.call_graph:
             parts.append("### Related Code Flow:")
-            for item in self.call_graph[:5]:  # Limit to 5 items
+            for item in self.call_graph[:5]:
                 entity_type = item.get("type", "Entity")
                 name = item.get("name", "Unknown")
                 file_path = item.get("file", "")
@@ -76,11 +82,10 @@ class GraphContext:
                 parts.append(f"- Models: {', '.join(model_names)}")
         
         if self.related_entities:
-            # Check if any entities have call_count (analytics query result)
+            # Check if any entities have call_count (function analytics query result)
             has_call_counts = any(e.get("call_count") is not None for e in self.related_entities)
             
             if has_call_counts:
-                # Format as ranked call count table for analytics queries
                 parts.append("\n### Function Call Frequency (sorted by most called):")
                 for entity in self.related_entities[:50]:
                     name = entity.get("name", "Unknown")
@@ -94,7 +99,7 @@ class GraphContext:
             else:
                 # Standard entity listing
                 by_type: Dict[str, List[str]] = {}
-                for entity in self.related_entities[:50]:  # Generous limit for file listings
+                for entity in self.related_entities[:50]:
                     entity_type = entity.get("type", entity.get("labels", ["Entity"])[0] if isinstance(entity.get("labels"), list) else "Entity")
                     name = entity.get("name", "Unknown")
                     if entity_type not in by_type:
@@ -116,7 +121,8 @@ class GraphContext:
             "relationships": self.relationships,
             "traversal_depth": self.traversal_depth,
             "query_time_ms": self.query_time_ms,
-            "cypher_queries": self.cypher_queries
+            "cypher_queries": self.cypher_queries,
+            "cypher_analytics_text": self.cypher_analytics_text
         }
 
 
@@ -165,7 +171,8 @@ class GraphEnhancedRetriever:
         self,
         neo4j_uri: Optional[str] = None,
         config: Optional[GraphEnhancementConfig] = None,
-        mode: GraphEnhancementMode = GraphEnhancementMode.CODE_QUERIES_ONLY
+        mode: GraphEnhancementMode = GraphEnhancementMode.CODE_QUERIES_ONLY,
+        groq_api_key: Optional[str] = None
     ):
         """
         Initialize the graph-enhanced retriever.
@@ -174,6 +181,7 @@ class GraphEnhancedRetriever:
             neo4j_uri: Neo4j bolt URI (defaults to env var NEO4J_URI)
             config: Enhancement configuration
             mode: When to apply graph enhancement
+            groq_api_key: Groq API key for Text-to-Cypher (reads from env if not provided)
         """
         self.config = config or GraphEnhancementConfig()
         self.mode = mode
@@ -181,6 +189,8 @@ class GraphEnhancedRetriever:
         self.query_builder = None
         self._init_attempted = False
         self._neo4j_uri = neo4j_uri
+        self._groq_api_key = groq_api_key
+        self.text_to_cypher = None  # Initialized lazily after connection
         
         # Compile entity extraction patterns
         self._entity_patterns = [
@@ -214,6 +224,19 @@ class GraphEnhancedRetriever:
                 self.connection = Neo4jConnection.from_env()
             
             self.query_builder = GraphQuery(self.connection)
+            
+            # Initialize Text-to-Cypher for dynamic analytics
+            try:
+                from utils.text_to_cypher import TextToCypher
+                self.text_to_cypher = TextToCypher(
+                    neo4j_connection=self.connection,
+                    groq_api_key=self._groq_api_key
+                )
+                logger.info("TextToCypher initialized for dynamic graph analytics")
+            except Exception as e:
+                logger.warning(f"TextToCypher not available: {e}")
+                self.text_to_cypher = None
+            
             logger.info("Graph enhancement enabled - Neo4j connected")
             return True
             
@@ -468,6 +491,36 @@ class GraphEnhancedRetriever:
         Returns:
             Tuple of (enhanced results, graph context)
         """
+        # Ensure Neo4j + TextToCypher are initialized (lazy)
+        self._ensure_connection()
+        
+        # Detect graph analytics queries using TextToCypher (replaces hardcoded regex)
+        if self.text_to_cypher and self.text_to_cypher.is_graph_analytics_query(query):
+            logger.info("Graph analytics query detected via TextToCypher, bypassing should_enhance")
+            try:
+                formatted_text, cypher, records = self.text_to_cypher.execute_and_format(query)
+                # records is not None means query executed (even if empty list)
+                if formatted_text and records is not None:
+                    graph_context = GraphContext(
+                        related_entities=[],
+                        call_graph=[],
+                        route_flow=None,
+                        relationships=[],
+                        traversal_depth=0,
+                        query_time_ms=0,
+                        cypher_queries=[cypher] if cypher else [],
+                        cypher_analytics_text=formatted_text
+                    )
+                    logger.info(f"TextToCypher returned {len(records)} records")
+                    return results, graph_context
+            except Exception as e:
+                logger.warning(f"TextToCypher failed: {e}")
+            
+            # TextToCypher was the intended path but failed — do NOT fall through
+            # to the noisy entity extraction. Return results without graph context.
+            logger.info("TextToCypher analytics path failed, skipping entity extraction to avoid noise")
+            return results, None
+        
         # Check if enhancement should be applied
         if not self.should_enhance(query_type, requires_code):
             logger.debug(f"Graph enhancement skipped for query_type={query_type}")
@@ -618,7 +671,8 @@ def create_graph_enhanced_retriever(
     neo4j_uri: Optional[str] = None,
     mode: str = "code_queries_only",
     max_depth: int = 2,
-    graph_weight: float = 0.3
+    graph_weight: float = 0.3,
+    groq_api_key: Optional[str] = None
 ) -> GraphEnhancedRetriever:
     """
     Factory function to create a configured GraphEnhancedRetriever.
@@ -628,6 +682,7 @@ def create_graph_enhanced_retriever(
         mode: Enhancement mode ("always", "code_queries_only", "flow_queries_only", "disabled")
         max_depth: Maximum graph traversal depth
         graph_weight: RRF weight for graph-discovered entities
+        groq_api_key: Groq API key for Text-to-Cypher analytics
         
     Returns:
         Configured GraphEnhancedRetriever instance
@@ -641,5 +696,6 @@ def create_graph_enhanced_retriever(
     return GraphEnhancedRetriever(
         neo4j_uri=neo4j_uri,
         config=config,
-        mode=mode_enum
+        mode=mode_enum,
+        groq_api_key=groq_api_key
     )
