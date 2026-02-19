@@ -94,7 +94,7 @@ def main():
     ui_data = ui_parser.parse()
     js_data = js_parser.parse()
     
-    # Get View→JS includes
+    # Get View->JS includes
     views_path = laravel_root / "resources/views"
     view_js_includes = js_parser.parse_blade_js_includes(views_path)
     
@@ -145,6 +145,8 @@ def main():
                 "name": m["name"],
                 "controller_id": c_id,
                 "params": m["params"],
+                "visibility": m.get("visibility", "public"),
+                "is_static": m.get("is_static", False),
                 "start_line": m["line"]
             })
             
@@ -256,7 +258,46 @@ def main():
     loader.load_nodes_batch(ui_element_nodes, "UIElement")
     loader.load_nodes_batch(js_function_nodes, "JSFunction")
     
-    # 5. Prepare and Load Relationships
+    # 5. Create MODEL_MAPS_TO_TABLE relationships
+    # Strategy A: Case-insensitive name matching (e.g., Model "User" -> table "USERS")
+    # Strategy B: Co-occurrence: If an Action uses exactly 1 Model AND 1-2 tables, link them
+    logger.info("Creating MODEL_MAPS_TO_TABLE relationships...")
+    
+    known_table_ids = {t["id"] for t in table_nodes}
+    rels_model_table = set()
+    
+    # Strategy A: Direct name matching (case-insensitive)
+    for model in model_nodes:
+        model_name = model["name"]
+        model_lower = model_name.lower()
+        for table_id in known_table_ids:
+            table_lower = table_id.lower()
+            if table_lower == model_lower or table_lower == model_lower + 's' or table_lower == model_lower + 'es':
+                rels_model_table.add((model_name, table_id))
+    
+    # Strategy B: Co-occurrence inference from controllers
+    for c in controllers:
+        for m_data in c["methods"]:
+            models_used = set(m_data.get("models", []))
+            tables_used = {t["name"] for t in m_data.get("tables", []) if t["name"] in known_table_ids}
+            if len(models_used) == 1 and 0 < len(tables_used) <= 2:
+                for table_name in tables_used:
+                    rels_model_table.add((list(models_used)[0], table_name))
+    
+    # Strategy B: Co-occurrence inference from helpers
+    for h in helpers:
+        for m_data in h["methods"]:
+            models_used = set(m_data.get("models", []))
+            tables_used = {t["name"] for t in m_data.get("tables", []) if t["name"] in known_table_ids}
+            if len(models_used) == 1 and 0 < len(tables_used) <= 2:
+                for table_name in tables_used:
+                    rels_model_table.add((list(models_used)[0], table_name))
+    
+    rels_model_table_list = list(rels_model_table)
+    loader.load_relationships_batch(rels_model_table_list, "MODEL_MAPS_TO_TABLE", "Model", "DBTable")
+    logger.info(f"Created {len(rels_model_table_list)} MODEL_MAPS_TO_TABLE relationships")
+    
+    # 6. Prepare and Load Relationships
     logger.info("Loading Relationships...")
     
     # ROUTE_CALLS_ACTION
@@ -363,7 +404,8 @@ def main():
     # We can skip Includes for now or add to schema. 
     # Let's skip to strictly follow schema/doc.
     
-    # ACTION_CALLS_ACTION (inter-function calls like CommonFunctions::decrypt256())
+    # ACTION_CALLS_ACTION (inter-function calls)
+    # Handles both static calls (ClassName::method) and instance calls ($this->method)
     rels_action_calls_action = []
     
     # From controllers
@@ -372,7 +414,11 @@ def main():
         for m in c["methods"]:
             caller_id = f"{c_id}@{m['name']}"
             for call in m.get("function_calls", []):
-                target_id = f"{call['class']}@{call['method']}"
+                if call["class"] == "self":
+                    # $this->method() call - resolve to same controller
+                    target_id = f"{c_id}@{call['method']}"
+                else:
+                    target_id = f"{call['class']}@{call['method']}"
                 rels_action_calls_action.append((caller_id, target_id))
     
     # From helpers
@@ -381,7 +427,11 @@ def main():
         for m in h["methods"]:
             caller_id = f"{h_id}@{m['name']}"
             for call in m.get("function_calls", []):
-                target_id = f"{call['class']}@{call['method']}"
+                if call["class"] == "self":
+                    # $this->method() call - resolve to same helper class
+                    target_id = f"{h_id}@{call['method']}"
+                else:
+                    target_id = f"{call['class']}@{call['method']}"
                 rels_action_calls_action.append((caller_id, target_id))
     
     loader.load_relationships_batch(rels_action_calls_action, "ACTION_CALLS_ACTION", "Action", "Action")

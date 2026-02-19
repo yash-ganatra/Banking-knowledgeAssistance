@@ -173,8 +173,11 @@ class HelperParser:
 
     def _extract_function_calls(self, body: str) -> List[Dict[str, str]]:
         """
-        Extract static method calls like ClassName::methodName() from body.
-        Returns list of dicts: {'class': 'CommonFunctions', 'method': 'decrypt256'}
+        Extract method calls from body:
+        1. Static calls: ClassName::methodName()
+        2. Instance calls: $this->methodName()
+        
+        Returns list of dicts: {'class': 'ClassName'|'self', 'method': 'methodName'}
         """
         pattern = re.compile(r"([A-Z][a-zA-Z0-9_]+)::([a-zA-Z_]\w*)\s*\(")
 
@@ -189,6 +192,8 @@ class HelperParser:
 
         calls = []
         seen = set()
+        
+        # 1. Static method calls: ClassName::methodName()
         for match in pattern.finditer(body):
             class_name = match.group(1)
             method_name = match.group(2)
@@ -200,6 +205,16 @@ class HelperParser:
             if key not in seen:
                 seen.add(key)
                 calls.append({"class": class_name, "method": method_name})
+
+        # 2. Instance method calls: $this->methodName()
+        # These represent intra-class calls (ACTION_CALLS_ACTION within same class)
+        instance_pattern = re.compile(r"\$this->([a-zA-Z_]\w*)\s*\(")
+        for match in instance_pattern.finditer(body):
+            method_name = match.group(1)
+            key = f"self::{method_name}"
+            if key not in seen:
+                seen.add(key)
+                calls.append({"class": "self", "method": method_name})
 
         return calls
 

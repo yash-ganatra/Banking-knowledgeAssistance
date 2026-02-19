@@ -82,7 +82,7 @@ class GraphSchema:
     # Relationship types with (from_label, to_label)
     RELATIONSHIP_TYPES = {
         "ROUTE_CALLS_ACTION": ("Route", "Action"),
-        "HAS_ACTION": ("Controller", "Action"),  # Also used for HelperClass -> Action
+        "HAS_ACTION": ("Controller", "Action"),  # Also used for (HelperClass)-[:HAS_ACTION]->(Action) — batch loader passes labels explicitly
         "ACTION_LOADS_VIEW": ("Action", "BladeView"),
         "ACTION_USES_MODEL": ("Action", "Model"),
         "ACTION_READS_TABLE": ("Action", "DBTable"),

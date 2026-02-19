@@ -97,7 +97,8 @@ class SmartQueryRequest(BaseModel):
     query: str
     top_k: int = 5
     confidence_threshold: float = 0.5
-    min_relevance_score: float = 2.0  # Minimum cross-encoder score to include results
+    min_relevance_score: float = 0.0  # Cross-encoder acts as ranker only (not a filter).
+    # Quality gating is handled upstream by the distance pre-filter (0.7) and RRF.
     conversation_id: Optional[int] = None
 
 class QueryResponse(BaseModel):
@@ -376,7 +377,20 @@ def startup_event():
 
 # --- Helper to Format Context ---
 def format_context(results: List[Dict]) -> str:
-    return "\n\n".join([f"[Source: {r['metadata'].get('file_path') or r['metadata'].get('page_name') or 'N/A'}]\n{r['content']}" for r in results])
+    MAX_CHARS_PER_CHUNK = 5000
+    MAX_TOTAL_CHARS = 24000
+    parts = []
+    total = 0
+    for r in results:
+        content = r['content']
+        if len(content) > MAX_CHARS_PER_CHUNK:
+            content = content[:MAX_CHARS_PER_CHUNK] + "\n... [truncated]"
+        parts.append(f"[Source: {r['metadata'].get('file_path') or r['metadata'].get('page_name') or 'N/A'}]\n{content}")
+        total += len(content)
+        if total >= MAX_TOTAL_CHARS:
+            parts.append("[Remaining chunks omitted to fit context window]")
+            break
+    return "\n\n".join(parts)
 
 # --- Endpoints ---
 

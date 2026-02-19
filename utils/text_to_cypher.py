@@ -86,7 +86,10 @@ class TextToCypher:
             'ROUTE_CALLS_ACTION': ('Route', 'Action'),
             'ACTION_LOADS_VIEW': ('Action', 'BladeView'),
             'VIEW_CONTAINS_ELEMENT': ('BladeView', 'UIElement'),
-            'UI_POSTS_TO_ACTION': ('UIElement', 'Action')
+            'VIEW_INCLUDES_JS': ('BladeView', 'JSFunction'),
+            'UI_POSTS_TO_ACTION': ('UIElement', 'Action'),
+            'MODEL_MAPS_TO_TABLE': ('Model', 'DBTable'),
+            'TABLE_HAS_COLUMN': ('DBTable', 'DBColumn'),
         }
         for rel, (src, dst) in valid_rels.items():
             lines.append(f"- (:{src})-[:{rel}]->(:{dst})")
@@ -96,9 +99,11 @@ class TextToCypher:
         lines.append("- HAS_ACTION connects both Controller and HelperClass to Action nodes")
         lines.append("- Action nodes represent PHP methods/functions")
         lines.append("- DBTable nodes represent database tables referenced in code")
-        lines.append("- ACTION_CALLS_ACTION represents inter-function calls (e.g., one method calling another)")
+        lines.append("- ACTION_CALLS_ACTION represents inter-function calls (e.g., one method calling another, including $this->method() calls within the same class)")
+        lines.append("- MODEL_MAPS_TO_TABLE links a Model to the database table it represents (e.g., User model -> users table)")
         lines.append("- Node IDs use the format: ClassName@methodName for Actions, table_name for DBTable")
         lines.append("- Controller and HelperClass nodes have a 'file' property with the PHP file path")
+        lines.append("- Action nodes have 'visibility' (public/protected/private) and 'is_static' properties")
         
         return "\n".join(lines)
     
@@ -153,6 +158,8 @@ RULES:
    CORRECT: MATCH (n:Controller) WHERE toLower(n.name) CONTAINS toLower("dashboard") RETURN n
    INCORRECT: MATCH (n:Controller {{name: toLower("dashboard")}})
 12. Only use node labels and relationship types that exist in the schema above. Do NOT invent new ones.
+13. NEVER use CASE WHEN expressions in RETURN clauses. They cause syntax errors with quote escaping. Instead, just return the raw property values and let the application handle formatting.
+14. Do NOT fabricate or guess node IDs (e.g., do NOT write DBTable {{id: "PAN_CARD_TABLE"}}). If you don't know the exact ID, use pattern matching: WHERE toLower(t.id) CONTAINS toLower("pan")
 
 EXAMPLES:
 Q: "What tables does ReviewController use?"
@@ -178,7 +185,17 @@ A: MATCH (c:Controller)-[:HAS_ACTION]->(a:Action)
 Q: "What routes point to DashboardController?"
 A: MATCH (c:Controller)-[:HAS_ACTION]->(a:Action)<-[:ROUTE_CALLS_ACTION]-(r:Route)
    WHERE toLower(c.name) CONTAINS toLower("DashboardController")
-   RETURN r.method as method, r.uri as uri, a.name as action, c.name as controller"""
+   RETURN r.method as method, r.uri as uri, a.name as action, c.name as controller
+
+Q: "What table does the User model map to?"
+A: MATCH (m:Model)-[:MODEL_MAPS_TO_TABLE]->(t:DBTable)
+   WHERE toLower(m.name) CONTAINS toLower("User")
+   RETURN m.name as model, t.id as table_name
+
+Q: "Which actions call other actions within the same controller?"
+A: MATCH (a1:Action)-[:ACTION_CALLS_ACTION]->(a2:Action)
+   WHERE a1.controller_id = a2.controller_id
+   RETURN a1.name as caller, a2.name as callee, a1.controller_id as controller"""
 
         user_prompt = f"Generate a Cypher query for: {query}"
         
@@ -207,6 +224,10 @@ A: MATCH (c:Controller)-[:HAS_ACTION]->(a:Action)<-[:ROUTE_CALLS_ACTION]-(r:Rout
                 if re.search(rf'\b{keyword}\b', cypher_upper):
                     logger.warning(f"TextToCypher: Rejected write operation: {keyword}")
                     return None
+            
+            # Post-process: strip any CASE expressions that the LLM may have generated
+            # despite instructions (they cause quoting syntax errors in Neo4j)
+            cypher = re.sub(r',?\s*CASE\s+WHEN.*?(?:END|$)', '', cypher, flags=re.DOTALL | re.IGNORECASE).strip()
             
             logger.info(f"TextToCypher generated: {cypher}")
             return cypher
@@ -280,6 +301,9 @@ Generate ONLY the corrected Cypher query, nothing else. Remember: READ-ONLY quer
             for keyword in WRITE_KEYWORDS:
                 if re.search(rf'\b{keyword}\b', cypher_upper):
                     return None
+            
+            # Strip CASE WHEN expressions (same sanitizer as primary path)
+            cypher = re.sub(r',?\s*CASE\s+WHEN.*?(?:END|$)', '', cypher, flags=re.DOTALL | re.IGNORECASE).strip()
             
             logger.info(f"TextToCypher retry generated: {cypher}")
             return cypher

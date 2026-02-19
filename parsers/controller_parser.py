@@ -55,14 +55,17 @@ class ControllerParser:
             
         class_name = class_match.group(1)
         
-        # Extract Methods
+        # Extract Methods (all visibilities: public, protected, private, static)
         methods = []
-        # Pattern for public function method()
-        method_pattern = re.compile(r"public\s+function\s+(\w+)\s*\(([^)]*)\)")
+        method_pattern = re.compile(
+            r"(public|protected|private)\s+(static\s+)?function\s+(\w+)\s*\(([^)]*)\)"
+        )
         
         for match in method_pattern.finditer(content):
-            method_name = match.group(1)
-            params = match.group(2)
+            visibility = match.group(1)
+            is_static = bool(match.group(2))
+            method_name = match.group(3)
+            params = match.group(4)
             start_pos = match.end()
             
             # Find method body (naive approach: match braces)
@@ -77,6 +80,8 @@ class ControllerParser:
             methods.append({
                 "name": method_name,
                 "params": params,
+                "visibility": visibility,
+                "is_static": is_static,
                 "views": views,
                 "models": models,
                 "tables": tables,
@@ -161,8 +166,11 @@ class ControllerParser:
 
     def _extract_function_calls(self, body: str) -> List[Dict[str, str]]:
         """
-        Extract static method calls like ClassName::methodName() from body.
-        Returns list of dicts: {'class': 'CommonFunctions', 'method': 'decrypt256'}
+        Extract method calls from body:
+        1. Static calls: ClassName::methodName()
+        2. Instance calls: $this->methodName()
+        
+        Returns list of dicts: {'class': 'ClassName'|'self', 'method': 'methodName'}
         """
         # Match ClassName::methodName( patterns
         pattern = re.compile(r"([A-Z][a-zA-Z0-9_]+)::([a-zA-Z_]\w*)\s*\(")
@@ -179,6 +187,8 @@ class ControllerParser:
         
         calls = []
         seen = set()
+        
+        # 1. Static method calls: ClassName::methodName()
         for match in pattern.finditer(body):
             class_name = match.group(1)
             method_name = match.group(2)
@@ -190,6 +200,16 @@ class ControllerParser:
             if key not in seen:
                 seen.add(key)
                 calls.append({"class": class_name, "method": method_name})
+        
+        # 2. Instance method calls: $this->methodName()
+        # These represent intra-controller calls (ACTION_CALLS_ACTION within same class)
+        instance_pattern = re.compile(r"\$this->([a-zA-Z_]\w*)\s*\(")
+        for match in instance_pattern.finditer(body):
+            method_name = match.group(1)
+            key = f"self::{method_name}"
+            if key not in seen:
+                seen.add(key)
+                calls.append({"class": "self", "method": method_name})
         
         return calls
 

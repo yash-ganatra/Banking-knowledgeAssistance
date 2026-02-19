@@ -426,8 +426,11 @@ class ResultFusion:
         if self.use_cross_encoder:
             try:
                 from sentence_transformers import CrossEncoder
-                self.cross_encoder = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
-                logger.info("Cross-encoder loaded for result reranking")
+                # BAAI/bge-reranker-base: good open-source reranker for mixed text+code.
+                # Much better than ms-marco-MiniLM for code chunks, while being fast on CPU.
+                # bge-reranker-v2-m3 was too slow on CPU (~158s/batch); this runs in ~3-5s.
+                self.cross_encoder = CrossEncoder('BAAI/bge-reranker-base')
+                logger.info("Cross-encoder loaded for result reranking (BAAI/bge-reranker-base)")
             except Exception as e:
                 logger.warning(f"Failed to load cross-encoder: {e}. Continuing without reranking.")
                 self.use_cross_encoder = False
@@ -476,12 +479,11 @@ class ResultFusion:
                 unique_id = f"{source_name}::{result_id}"
                 
                 # Calculate RRF contribution from this source
+                # NOTE: We intentionally do NOT apply a per-chunk distance penalty here.
+                # The distance pre-filter (before RRF) already removes truly bad chunks.
+                # A per-chunk penalty would double-penalize structural/code queries where
+                # semantic distance is naturally higher even for highly relevant chunks.
                 rrf_contribution = 1.0 / (self.k + rank)
-                
-                # Apply quality penalty if source seems irrelevant
-                distance = result.get('distance', 0)
-                if distance > source_quality_threshold:
-                    rrf_contribution *= 0.5  # Reduce contribution from poor matches
                 
                 # Accumulate RRF score
                 if unique_id not in rrf_scores:
@@ -840,7 +842,9 @@ class QueryRouter:
             final_top_k = top_k
         
         # Run parallel queries - get more candidates for reranking
-        retrieve_k = top_k * 2  # Get 2x candidates for better reranking
+        # 3x multiplier ensures deep-ranked but relevant chunks (e.g. rank 12 of 15)
+        # are still captured before RRF fusion.
+        retrieve_k = top_k * 3
         results_by_source, _ = await self.query_parallel(sources, query, retrieve_k, query_intent=query_intent)
         
         # Apply RRF to merge results with quality filtering
@@ -887,7 +891,8 @@ class QueryRouter:
             final_top_k = top_k
         
         # Run parallel queries - get more candidates for reranking
-        retrieve_k = top_k * 2
+        # 3x multiplier ensures deep-ranked but relevant chunks are still captured.
+        retrieve_k = top_k * 3
         retrieval_start = time.time()
         results_by_source, _ = await self.query_parallel(
             sources, query, retrieve_k, 
@@ -932,9 +937,12 @@ class QueryRouter:
 
         
         # Pre-filter results: Remove obviously irrelevant results BEFORE RRF
-        # This prevents low-quality results from polluting the fusion
+        # This prevents low-quality results from polluting the fusion.
+        # Threshold raised to 0.7 (from 0.5) because structural/code queries
+        # (e.g. "dependency chain", "review method") have a natural semantic gap
+        # from raw code chunks — a distance of 0.55 is still a valid match.
         filtered_results = {}
-        distance_threshold = 0.5  # More aggressive for secondary sources
+        distance_threshold = 0.7
         
         for source_name, results in results_by_source.items():
             if len(results) == 0:
@@ -1226,6 +1234,10 @@ class UnifiedQueryEngine:
         if not results:
             return "No relevant context found."
         
+        # Max chars per chunk and total context to avoid exceeding Groq's token limit
+        MAX_CHARS_PER_CHUNK = 5000   # ~1250 tokens per chunk
+        MAX_TOTAL_CHARS = 24000      # ~6000 tokens total context
+        
         # Group by source for better organization
         by_source = {}
         for r in results:
@@ -1243,6 +1255,7 @@ class UnifiedQueryEngine:
             "blade_templates": "Blade Templates"
         }
         
+        total_chars = 0
         for source, source_results in by_source.items():
             label = source_labels.get(source, source)
             context_parts.append(f"\n{'='*60}")
@@ -1254,7 +1267,22 @@ class UnifiedQueryEngine:
                 context_parts.append(f"\n[{i}] Source: {file_path}")
                 if 'rrf_score' in r:
                     context_parts.append(f"    Relevance Score: {r['rrf_score']:.4f}")
-                context_parts.append(f"\n{r['content']}\n")
+                
+                # Truncate individual chunks to prevent a single massive chunk
+                content = r['content']
+                if len(content) > MAX_CHARS_PER_CHUNK:
+                    content = content[:MAX_CHARS_PER_CHUNK] + "\n... [truncated for context limit]"
+                
+                context_parts.append(f"\n{content}\n")
+                total_chars += len(content)
+                
+                # Stop adding chunks if we've exceeded the total budget
+                if total_chars >= MAX_TOTAL_CHARS:
+                    context_parts.append(f"\n[Remaining chunks omitted to fit context window]")
+                    break
+            
+            if total_chars >= MAX_TOTAL_CHARS:
+                break
         
         # Join context and apply security filtering to redact sensitive data
         raw_context = "\n".join(context_parts)
