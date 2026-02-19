@@ -352,7 +352,7 @@ function ChatApp() {
                   </div>
                   <span className="font-bold text-gray-800 dark:text-white tracking-tight">Cube AI</span>
                 </div>
-                <button onClick={() => setIsSidebarOpen(false)} className="p-1 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded" title="Close Sidebar">
+                <button onClick={() => setIsSidebarOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded" title="Close Sidebar">
                   <PanelLeftClose size={20} />
                 </button>
               </div>
@@ -555,22 +555,17 @@ function ChatApp() {
                     animate={{ opacity: 1, y: 0 }}
                     key={message.id}
                     className={cn(
-                      "flex items-start gap-4 max-w-3xl",
+                      "flex items-start gap-4 max-w-4xl",
                       message.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto"
                     )}
                   >
-                    <div className={cn(
-                      "w-10 h-10 rounded-full flex items-center justify-center shrink-0 shadow-sm",
-                      message.role === 'user' ? "bg-primary-600 text-white" : "bg-white text-primary-600 border border-gray-100"
-                    )}>
-                      {message.role === 'user' ? <User size={20} /> : <Bot size={20} />}
-                    </div>
+
 
                     <div className={cn(
-                      "p-4 rounded-2xl shadow-sm text-sm leading-relaxed overflow-hidden",
+                      "text-base leading-relaxed overflow-hidden max-w-full",
                       message.role === 'user'
-                        ? "bg-primary-600 text-white rounded-tr-none"
-                        : "bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-100 dark:border-gray-800 rounded-tl-none text-gray-700 dark:text-gray-300"
+                        ? "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-100 px-5 py-3 rounded-3xl rounded-tr-sm"
+                        : "bg-transparent text-gray-800 dark:text-gray-100 px-5 py-1"
                     )}>
                       {message.role === 'user' ? (
                         <div className="whitespace-pre-wrap">{message.content}</div>
@@ -645,15 +640,12 @@ function ChatApp() {
                 ))}
 
                 {isLoading && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-4 max-w-3xl mr-auto">
-                    <div className="w-10 h-10 rounded-full bg-white dark:bg-gray-900 text-primary-600 border border-gray-100 dark:border-gray-800 flex items-center justify-center shrink-0 shadow-sm">
-                      <Bot size={20} />
-                    </div>
-                    <div className="bg-white/80 dark:bg-gray-900/80 backdrop-blur-sm border border-gray-100 dark:border-gray-800 p-4 rounded-2xl rounded-tl-none">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-start gap-4 max-w-4xl mr-auto px-5">
+                    <div className="bg-transparent px-0 py-1">
                       <div className="flex gap-1">
-                        <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-2 h-2 bg-primary-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
                       </div>
                     </div>
                   </motion.div>
@@ -666,20 +658,20 @@ function ChatApp() {
               <div className="p-4 lg:p-8 bg-gradient-to-t from-white via-white/80 to-transparent dark:from-gray-950 dark:via-gray-950/80">
                 <div className="max-w-4xl mx-auto relative group">
                   <div className="absolute -inset-1 bg-gradient-to-r from-primary-400 to-primary-600 rounded-xl blur opacity-20 group-hover:opacity-30 transition duration-1000 group-hover:duration-200" />
-                  <form onSubmit={handleSendMessage} className="relative flex items-center gap-2 bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-gray-100 dark:border-gray-800 p-2">
+                  <form onSubmit={handleSendMessage} className="relative flex items-center gap-2 bg-gray-100 dark:bg-gray-800 rounded-[26px] p-2 pl-5 transition-shadow focus-within:ring-2 focus-within:ring-primary-100 dark:focus-within:ring-primary-900/30">
                     <input
                       type="text"
                       value={inputValue}
                       onChange={(e) => setInputValue(e.target.value)}
-                      placeholder={`Ask about ${contexts.find(c => c.id === selectedContext)?.label}...`}
-                      className="flex-1 px-4 py-2 bg-transparent text-gray-800 dark:text-gray-100 placeholder-gray-400 focus:outline-none"
+                      placeholder={`Message Cube AI...`}
+                      className="flex-1 bg-transparent text-gray-800 dark:text-gray-100 placeholder-gray-500 focus:outline-none text-base py-2"
                     />
                     <button
                       type="submit"
-                      disabled={isLoading}
-                      className="p-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors shadow-md transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:transform-none"
+                      disabled={isLoading || !inputValue.trim()}
+                      className="p-2 bg-primary-600 text-white rounded-full hover:bg-primary-700 transition-all disabled:opacity-30 disabled:cursor-not-allowed transform hover:scale-105 active:scale-95"
                     >
-                      <Send size={20} />
+                      <Send size={18} />
                     </button>
                   </form>
                   <div className="text-center mt-2 text-xs text-gray-400">
