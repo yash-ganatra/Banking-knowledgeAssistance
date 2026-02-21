@@ -55,6 +55,25 @@ class HelperParser:
 
         return helpers
 
+    def parse_single_file(self, file_path: str) -> Dict[str, Any]:
+        """
+        Parse a single PHP helper/utility file.
+        Used by the ingestion pipeline for incremental updates.
+        
+        Args:
+            file_path: Absolute path to a .php helper file
+        
+        Returns:
+            Dict with helper data, or empty dict if parsing fails
+        """
+        file_path = Path(file_path)
+        if not file_path.exists():
+            logger.warning(f"File not found: {file_path}")
+            return {}
+        logger.info(f"Parsing helper: {file_path.name}")
+        result = self._parse_file(file_path)
+        return result if result else {}
+
     def _parse_file(self, file_path: Path) -> Dict[str, Any]:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()

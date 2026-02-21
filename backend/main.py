@@ -301,6 +301,10 @@ def startup_event():
     from routers.inference_logs import router as inference_logs_router
     app.include_router(inference_logs_router)
     
+    # Include sync routes
+    from routers.sync_routes import router as sync_router
+    app.include_router(sync_router)
+    
     # Initialize Business Engine
     try:
         business_engine = BusinessQueryEngine()

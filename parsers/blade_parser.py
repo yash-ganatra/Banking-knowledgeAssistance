@@ -40,6 +40,24 @@ class BladeParser:
                 
         return views
 
+    def parse_single_file(self, file_path: str) -> Dict[str, Any]:
+        """
+        Parse a single blade file and return its view definition.
+        Used by the ingestion pipeline for incremental updates.
+        
+        Args:
+            file_path: Absolute path to a .blade.php file
+        
+        Returns:
+            Dict with view data, or empty dict if parsing fails
+        """
+        file_path = Path(file_path)
+        if not file_path.exists():
+            logger.warning(f"File not found: {file_path}")
+            return {}
+        result = self._parse_file(file_path)
+        return result if result else {}
+
     def _parse_file(self, file_path: Path) -> Dict[str, Any]:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()

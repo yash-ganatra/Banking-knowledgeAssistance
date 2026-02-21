@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Moon, Sun, LogOut, Activity } from 'lucide-react';
+import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Moon, Sun, LogOut, Activity, RefreshCw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RotatingCube } from './components/RotatingCube';
 import { BackgroundEffects } from './components/BackgroundEffects';
 import { MermaidDiagram } from './components/MermaidDiagram';
 import CodeReview from './components/CodeReview';
 import InferenceLogs from './components/InferenceLogs';
+import SyncKnowledgeBase from './components/SyncKnowledgeBase';
 import { useAuth } from './contexts/AuthContext';
 
 import { cn } from './lib/utils';
@@ -15,6 +16,7 @@ function ChatApp() {
   const { user, logout, loading: authLoading } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeView, setActiveView] = useState('chat'); // 'chat', 'code-review', or 'inference-logs'
+  const [showSyncModal, setShowSyncModal] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('theme');
@@ -435,6 +437,16 @@ function ChatApp() {
                       <motion.div layoutId="active-capability" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
                     )}
                   </div>
+                  <div
+                    onClick={() => setShowSyncModal(true)}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
+                      "text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-300"
+                    )}
+                  >
+                    <RefreshCw size={18} />
+                    <span>Sync Knowledge</span>
+                  </div>
                 </div>
 
                 {/* Conversations - only show in chat view */}
@@ -683,6 +695,13 @@ function ChatApp() {
           )}
         </main>
       </div>
+
+      {/* Sync Knowledge Base Modal */}
+      <SyncKnowledgeBase
+        isOpen={showSyncModal}
+        onClose={() => setShowSyncModal(false)}
+        isDarkMode={isDarkMode}
+      />
     </div>
   );
 }

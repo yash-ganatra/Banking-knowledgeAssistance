@@ -1,0 +1,26 @@
+{
+  "nodes": {
+    "Action": 851,
+    "BladeView": 179,
+    "Controller": 49,
+    "DBTable": 117,
+    "HelperClass": 14,
+    "JSFunction": 1096,
+    "Model": 38,
+    "Route": 388,
+    "UIElement": 1480
+  },
+  "relationships": {
+    "ACTION_CALLS_ACTION": 1503,
+    "ACTION_LOADS_VIEW": 174,
+    "ACTION_READS_TABLE": 1074,
+    "ACTION_USES_MODEL": 1154,
+    "ACTION_WRITES_TABLE": 270,
+    "HAS_ACTION": 851,
+    "MODEL_MAPS_TO_TABLE": 75,
+    "ROUTE_CALLS_ACTION": 335,
+    "UI_POSTS_TO_ACTION": 7,
+    "VIEW_CONTAINS_ELEMENT": 1480,
+    "VIEW_INCLUDES_JS": 2387
+  }
+}

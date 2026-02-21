@@ -69,6 +69,27 @@ class JSParser:
             "view_includes_js": []  # Populated by scanning blade files
         }
     
+    def parse_single_file(self, file_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse a single JS file by absolute path.
+        Used by the ingestion pipeline for incremental updates.
+        
+        Args:
+            file_path: Absolute path to a .js file
+        
+        Returns:
+            Dict with functions and endpoints, or None if parsing fails
+        """
+        file_path = Path(file_path)
+        if not file_path.exists():
+            logger.warning(f"File not found: {file_path}")
+            return None
+        try:
+            return self._parse_file(file_path)
+        except Exception as e:
+            logger.warning(f"Error parsing {file_path}: {e}")
+            return None
+
     def _parse_file(self, file_path: Path) -> Optional[Dict[str, Any]]:
         """Parse a single JS file"""
         with open(file_path, "r", encoding="utf-8", errors="ignore") as f:

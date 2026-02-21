@@ -44,7 +44,7 @@ BM25_INDEX_DIR = PROJECT_ROOT / "bm25_indices"
 # ChromaDB collection configurations
 COLLECTIONS = {
     'php_code': {
-        'db_path': VECTOR_DB_ROOT / 'php_chroma_db',
+        'db_path': VECTOR_DB_ROOT / 'php_vector_db',
         'collection_name': 'php_code_chunks'
     },
     'js_code': {
