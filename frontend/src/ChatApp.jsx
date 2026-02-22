@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Moon, Sun, LogOut, Activity, RefreshCw } from 'lucide-react';
+import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Moon, Sun, LogOut, Activity, RefreshCw, Search } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RotatingCube } from './components/RotatingCube';
 import { BackgroundEffects } from './components/BackgroundEffects';
@@ -7,6 +7,7 @@ import { MermaidDiagram } from './components/MermaidDiagram';
 import CodeReview from './components/CodeReview';
 import InferenceLogs from './components/InferenceLogs';
 import SyncKnowledgeBase from './components/SyncKnowledgeBase';
+import SearchModal from './components/SearchModal';
 import { useAuth } from './contexts/AuthContext';
 
 import { cn } from './lib/utils';
@@ -17,6 +18,7 @@ function ChatApp() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [activeView, setActiveView] = useState('chat'); // 'chat', 'code-review', or 'inference-logs'
   const [showSyncModal, setShowSyncModal] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('theme');
@@ -78,7 +80,7 @@ function ChatApp() {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  // Load conversations on mount (only if user is authenticated and auth is not loading)
+  // Load conversations on mount
   useEffect(() => {
     if (user && !authLoading) {
       loadConversations();
@@ -86,7 +88,7 @@ function ChatApp() {
   }, [user, authLoading]);
 
   // Load conversations from API
-  const loadConversations = async () => {
+  const loadConversations = async (search = '') => {
     const token = localStorage.getItem('token');
     if (!token || !user) {
       console.log('No token or user found, skipping conversation load');
@@ -99,7 +101,12 @@ function ChatApp() {
       const headers = getAuthHeaders();
       console.log('Request headers:', headers);
 
-      const response = await fetch('http://localhost:8000/api/chat/conversations', {
+      const url = new URL('http://localhost:8000/api/chat/conversations');
+      if (search) {
+        url.searchParams.append('search', search);
+      }
+
+      const response = await fetch(url, {
         headers: headers
       });
 
@@ -328,7 +335,7 @@ function ChatApp() {
       <AnimatePresence>
         {!hasUserInteracted && activeView !== 'code-review' && activeView !== 'inference-logs' && (
           <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none">
-            <RotatingCube layoutId="cube-main" size={180} />
+            <RotatingCube layoutId="cube-main" size={180} textColor="text-blue-600 dark:text-blue-400" />
           </div>
         )}
       </AnimatePresence>
@@ -344,15 +351,15 @@ function ChatApp() {
               className="h-full bg-white/80 dark:bg-gray-900/80 backdrop-blur-md border-r border-gray-200 dark:border-gray-800 shadow-xl flex flex-col"
             >
               <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
-                <div className="flex items-center gap-4">
-                  <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white overflow-visible">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 flex items-center justify-center overflow-visible">
                     {hasUserInteracted ? (
-                      <RotatingCube layoutId="cube-main" size={32} />
+                      <RotatingCube layoutId="cube-main" size={38} textColor="text-blue-600 dark:text-blue-400" disableInteractive />
                     ) : (
-                      <Shield size={18} />
+                      <RotatingCube layoutId="cube-sidebar" size={38} textColor="text-blue-600 dark:text-blue-400" disableInteractive />
                     )}
                   </div>
-                  <span className="font-bold text-gray-800 dark:text-white tracking-tight">Cube AI</span>
+                  <span className="font-bold text-xl text-gray-800 dark:text-white tracking-tight">Cube AI</span>
                 </div>
                 <button onClick={() => setIsSidebarOpen(false)} className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded" title="Close Sidebar">
                   <PanelLeftClose size={20} />
@@ -454,13 +461,22 @@ function ChatApp() {
                   <div className="space-y-1 pt-4 border-t border-gray-100 dark:border-gray-800">
                     <div className="flex items-center justify-between px-2 mb-2">
                       <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Conversations</h3>
-                      <button
-                        onClick={createNewConversation}
-                        className="p-1 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition-colors"
-                        title="New Conversation"
-                      >
-                        <Plus size={16} />
-                      </button>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => setIsSearchModalOpen(true)}
+                          className="p-1 text-gray-400 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition-colors"
+                          title="Search Chats"
+                        >
+                          <Search size={16} />
+                        </button>
+                        <button
+                          onClick={createNewConversation}
+                          className="p-1 text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded transition-colors"
+                          title="New Conversation"
+                        >
+                          <Plus size={16} />
+                        </button>
+                      </div>
                     </div>
 
                     {loadingConversations || authLoading ? (
@@ -701,6 +717,15 @@ function ChatApp() {
         isOpen={showSyncModal}
         onClose={() => setShowSyncModal(false)}
         isDarkMode={isDarkMode}
+      />
+
+      {/* Search Modal */}
+      <SearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        isDarkMode={isDarkMode}
+        loadConversation={loadConversation}
+        createNewConversation={createNewConversation}
       />
     </div>
   );

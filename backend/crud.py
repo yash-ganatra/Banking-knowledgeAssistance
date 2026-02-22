@@ -106,12 +106,36 @@ def get_conversation(db: Session, conversation_id: int, user_id: int) -> Optiona
 
 
 def get_user_conversations(db: Session, user_id: int, include_archived: bool = False,
-                          limit: int = 50) -> List[Conversation]:
-    """Get all conversations for a user, ordered by most recent"""
-    query = db.query(Conversation).filter(Conversation.user_id == user_id)
+                          limit: int = 50, search_query: Optional[str] = None) -> List[Conversation]:
+    """Get all conversations for a user, ordered by most recent, optionally filtered by title or message content"""
     
+    # Base query for the user
+    query = db.query(Conversation).filter(Conversation.user_id == user_id)
     if not include_archived:
         query = query.filter(Conversation.is_archived == False)
+        
+    if search_query:
+        # First get the IDs of the 5 most recent conversations
+        base_recent_query = db.query(Conversation.id).filter(Conversation.user_id == user_id)
+        if not include_archived:
+            base_recent_query = base_recent_query.filter(Conversation.is_archived == False)
+        recent_ids = [row[0] for row in base_recent_query.order_by(desc(Conversation.updated_at)).limit(5).all()]
+        
+        # If there are no recent conversations, return empty
+        if not recent_ids:
+            return []
+            
+        # Restrict the search to ONLY these recent 5 conversations
+        query = query.filter(Conversation.id.in_(recent_ids))
+        
+        # Join with Message table to search contents
+        query = query.outerjoin(Message, Conversation.id == Message.conversation_id)
+        
+        search_term = f"%{search_query}%"
+        query = query.filter(
+            (Conversation.title.ilike(search_term)) | 
+            (Message.content.ilike(search_term))
+        ).distinct()
     
     return query.order_by(desc(Conversation.updated_at)).limit(limit).all()
 

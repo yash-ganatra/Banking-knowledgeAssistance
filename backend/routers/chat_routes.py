@@ -93,6 +93,7 @@ def create_conversation(
 def get_conversations(
     include_archived: bool = False,
     limit: int = 50,
+    search: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -105,7 +106,8 @@ def get_conversations(
         db=db,
         user_id=user.id,
         include_archived=include_archived,
-        limit=limit
+        limit=limit,
+        search_query=search
     )
     
     # Add message count to each conversation

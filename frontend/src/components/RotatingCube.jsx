@@ -1,19 +1,21 @@
 import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
 import { useEffect } from "react";
 
-export function RotatingCube({ size = 288, layoutId, className, textColor = "text-white" }) {
+export function RotatingCube({ size = 288, layoutId, className, textColor = "text-white", disableInteractive = false }) {
     // Half size (translateZ) is size / 2
     const halfSize = `${size / 2}px`;
 
     const x = useMotionValue(0);
     const y = useMotionValue(0);
 
-    // Smooth spring animation
-    const springConfig = { damping: 20, stiffness: 100 };
+    // Snappier spring animation to reduce lag
+    const springConfig = { damping: 30, stiffness: 300, mass: 0.8 };
     const rotateX = useSpring(useTransform(y, [0, window.innerHeight], [45, -45]), springConfig);
     const rotateY = useSpring(useTransform(x, [0, window.innerWidth], [-45, 45]), springConfig);
 
     useEffect(() => {
+        if (disableInteractive) return;
+
         function handleMouse(e) {
             x.set(e.clientX);
             y.set(e.clientY);
@@ -21,7 +23,7 @@ export function RotatingCube({ size = 288, layoutId, className, textColor = "tex
 
         window.addEventListener("mousemove", handleMouse);
         return () => window.removeEventListener("mousemove", handleMouse);
-    }, [x, y]);
+    }, [x, y, disableInteractive]);
 
     // Adjust font sizes based on cube size
     const isSmall = size < 100;
@@ -30,10 +32,12 @@ export function RotatingCube({ size = 288, layoutId, className, textColor = "tex
     const fontSizeSm = isSmall ? "text-[0px]" : "text-lg";
 
     // Dynamic classes based on text color context
-    // If text is not white (e.g. blue), we likely want a lighter face background
-    const faceBgClass = textColor === "text-white"
-        ? "bg-primary-500/30 backdrop-blur-sm border-white/20"
-        : "bg-blue-100/30 backdrop-blur-sm border-blue-500/20";
+    const isWhite = textColor === "text-white";
+    // For white text (primary cube), keep the primary style.
+    // For colored text (like blue), use the original light mode style but inject the vibrant dark mode style
+    const faceBgClass = isWhite
+        ? "bg-primary-500/30 backdrop-blur-sm border-white/20 shadow-[inset_0_0_20px_rgba(255,255,255,0.2)]"
+        : "bg-blue-100/30 dark:bg-blue-500/10 backdrop-blur-sm border-blue-500/20 dark:border-blue-400/30 dark:shadow-[inset_0_0_20px_rgba(96,165,250,0.15)]";
 
     return (
         <motion.div
@@ -43,7 +47,7 @@ export function RotatingCube({ size = 288, layoutId, className, textColor = "tex
         >
             {/* Gradient glow/shadow behind the cube - only show when large */}
             {!isSmall && (
-                <div className={`absolute w-96 h-96 rounded-full blur-3xl -z-10 ${textColor === "text-white" ? "bg-primary-500/20" : "bg-blue-500/10"}`} />
+                <div className={`absolute w-96 h-96 rounded-full blur-3xl -z-10 ${isWhite ? "bg-primary-500/20" : "bg-blue-500/20 dark:bg-blue-500/10"}`} />
             )}
 
             <motion.div

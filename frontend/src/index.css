@@ -8,7 +8,7 @@
   }
   
   body {
-    @apply antialiased text-gray-800 bg-white min-h-screen;
+    @apply antialiased font-sans text-gray-800 bg-white min-h-screen;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
   
