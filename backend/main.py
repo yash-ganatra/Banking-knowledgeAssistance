@@ -216,8 +216,12 @@ class LLMService:
         # Initialize output filter for response sanitization
         self.output_filter = OutputFilter(strict_mode=True)
 
-    def generate_response(self, system_prompt: str, user_query: str, context: str, model: str = "llama-3.3-70b-versatile") -> str:
-        """Generate LLM response with retry logic, caching, and security filtering"""
+    def generate_response(self, system_prompt: str, user_query: str, context: str, model: str = "llama-3.3-70b-versatile"):
+        """Generate LLM response with retry logic, caching, and security filtering.
+        
+        Returns:
+            Tuple of (response_text, input_tokens, output_tokens)
+        """
         try:
             @self.rate_limiter.with_retry
             def _make_completion(client, messages, model, temperature, max_tokens):
@@ -246,20 +250,25 @@ class LLMService:
             
             raw_response = chat_completion.choices[0].message.content
             
+            # Extract token usage
+            usage = getattr(chat_completion, 'usage', None)
+            input_tokens = getattr(usage, 'prompt_tokens', None) if usage else None
+            output_tokens = getattr(usage, 'completion_tokens', None) if usage else None
+            
             # Apply output filtering to redact any sensitive data in the response
             filtered_response = self.output_filter.filter_response(raw_response)
             
             if filtered_response.redactions_made > 0:
                 logger.info(f"Output filter redacted {filtered_response.redactions_made} sensitive patterns")
             
-            return filtered_response.response
+            return filtered_response.response, input_tokens, output_tokens
             
         except Exception as e:
             logger.error(f"LLM Error after retries: {e}")
             # Check if rate limit error
             if "rate_limit" in str(e).lower():
-                return f"⚠️ Rate limit reached. Please try again in a few minutes or upgrade your Groq plan. The system will automatically retry with a smaller model."
-            return f"Error generating response: {str(e)}"
+                return f"⚠️ Rate limit reached. Please try again in a few minutes or upgrade your Groq plan. The system will automatically retry with a smaller model.", None, None
+            return f"Error generating response: {str(e)}", None, None
     
     def get_usage_stats(self) -> Dict[str, Any]:
         """Get token usage statistics"""
@@ -556,7 +565,7 @@ async def inference_business(request: QueryRequest, db: Session = Depends(databa
         # Use hardened system prompt with security preamble
         base_prompt = "You are an expert banking assistant. Answer the user query based strictly on the provided business documentation context. If the provided context contains Mermaid JS diagram code, you MUST include it in your response wrapped in a mermaid code block."
         system_prompt = get_hardened_system_prompt(base_prompt, get_banking_security_addendum())
-        llm_response = llm_service.generate_response(system_prompt, request.query, context)
+        llm_response, _, _ = llm_service.generate_response(system_prompt, request.query, context)
     
     # Save to database if conversation_id provided
     if request.conversation_id:
@@ -595,7 +604,7 @@ async def inference_php(request: QueryRequest, db: Session = Depends(database.ge
         # Use hardened system prompt with security preamble
         base_prompt = "You are an expert PHP Laravel developer. Answer the user query based strictly on the provided PHP code context. Do not hallucinate."
         system_prompt = get_hardened_system_prompt(base_prompt, get_banking_security_addendum())
-        llm_response = llm_service.generate_response(system_prompt, request.query, context)
+        llm_response, _, _ = llm_service.generate_response(system_prompt, request.query, context)
     
     # Save to database if conversation_id provided
     if request.conversation_id:
@@ -632,7 +641,7 @@ async def inference_js(request: QueryRequest, db: Session = Depends(database.get
         # Use hardened system prompt with security preamble
         base_prompt = "You are an expert JavaScript/React developer. Answer the user query based strictly on the provided JS code context. Do not hallucinate."
         system_prompt = get_hardened_system_prompt(base_prompt, get_banking_security_addendum())
-        llm_response = llm_service.generate_response(system_prompt, request.query, context)
+        llm_response, _, _ = llm_service.generate_response(system_prompt, request.query, context)
     
     # Save to database if conversation_id provided
     if request.conversation_id:
@@ -689,7 +698,7 @@ Guidelines:
 4. Be concise but thorough
 5. If context is insufficient, say so"""
         system_prompt = get_hardened_system_prompt(base_prompt, get_banking_security_addendum())
-        llm_response = llm_service.generate_response(system_prompt, request.query, context)
+        llm_response, _, _ = llm_service.generate_response(system_prompt, request.query, context)
     
     # Save to database if conversation_id provided
     if request.conversation_id:

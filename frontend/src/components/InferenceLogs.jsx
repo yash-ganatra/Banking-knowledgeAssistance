@@ -846,7 +846,7 @@ export default function InferenceLogs() {
 
         {/* Summary cards */}
         {summary && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
             <StatCard
               icon={BarChart2}
               label="Total Queries"
@@ -874,6 +874,20 @@ export default function InferenceLogs() {
               value={summary.avg_chunks_retrieved?.toFixed(1) || 0}
               subtext="Per query"
               color="blue"
+            />
+            <StatCard
+              icon={Zap}
+              label="Avg Input Tokens"
+              value={summary.avg_input_tokens?.toFixed(0) || '–'}
+              subtext="Prompt tokens"
+              color="yellow"
+            />
+            <StatCard
+              icon={Activity}
+              label="Avg Output Tokens"
+              value={summary.avg_output_tokens?.toFixed(0) || '–'}
+              subtext="Completion tokens"
+              color="green"
             />
           </div>
         )}

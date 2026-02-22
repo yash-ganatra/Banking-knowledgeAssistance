@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, Database, FileText, FileCode, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Moon, Sun, LogOut, Activity, RefreshCw, Search } from 'lucide-react';
+import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, ChevronDown, ChevronRight, Database, FileText, FileCode, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Moon, Sun, LogOut, Activity, RefreshCw, Search } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RotatingCube } from './components/RotatingCube';
 import { BackgroundEffects } from './components/BackgroundEffects';
@@ -19,6 +19,9 @@ function ChatApp() {
   const [activeView, setActiveView] = useState('chat'); // 'chat', 'code-review', or 'inference-logs'
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+  const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
+  const [isContextSourceOpen, setIsContextSourceOpen] = useState(true);
+  const profileMenuRef = useRef(null);
   const [isDarkMode, setIsDarkMode] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('theme');
@@ -53,6 +56,16 @@ function ChatApp() {
       localStorage.setItem('theme', 'light');
     }
   }, [isDarkMode]);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target)) {
+        setIsProfileMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const [selectedContext, setSelectedContext] = useState('smart'); // smart, business, php, js, blade
   const [messages, setMessages] = useState([
@@ -368,35 +381,6 @@ function ChatApp() {
 
               <div className="flex-1 overflow-y-auto scrollbar-hide p-4 space-y-6">
 
-                {/* Context Selector - only show in chat view */}
-                {activeView === 'chat' && (
-                  <div className="space-y-2">
-                    <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Context Source</h3>
-                    <div className="space-y-1">
-                      {contexts.map((ctx) => (
-                        <div
-                          key={ctx.id}
-                          onClick={() => setSelectedContext(ctx.id)}
-                          className={cn(
-                            "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
-                            selectedContext === ctx.id
-                              ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800"
-                              : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
-                          )}
-                        >
-                          <span className={selectedContext === ctx.id ? "text-primary-600" : "text-gray-500"}>
-                            {ctx.icon}
-                          </span>
-                          <span>{ctx.label}</span>
-                          {selectedContext === ctx.id && (
-                            <motion.div layoutId="active-dot" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
                 <div className="space-y-1">
                   <h3 className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">Capabilities</h3>
                   <div
@@ -455,6 +439,52 @@ function ChatApp() {
                     <span>Sync Knowledge</span>
                   </div>
                 </div>
+
+                {/* Context Selector - only show in chat view */}
+                {activeView === 'chat' && (
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => setIsContextSourceOpen(!isContextSourceOpen)}
+                      className="w-full flex items-center justify-between px-2 py-1 text-xs font-semibold text-gray-400 uppercase tracking-wider hover:text-gray-600 dark:hover:text-gray-200 transition-colors group"
+                    >
+                      <span>Context Source</span>
+                      <span className="text-gray-300 dark:text-gray-600 group-hover:text-gray-500 dark:group-hover:text-gray-400">
+                        {isContextSourceOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      </span>
+                    </button>
+                    <AnimatePresence>
+                      {isContextSourceOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="space-y-1 overflow-hidden"
+                        >
+                          {contexts.map((ctx) => (
+                            <div
+                              key={ctx.id}
+                              onClick={() => setSelectedContext(ctx.id)}
+                              className={cn(
+                                "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
+                                selectedContext === ctx.id
+                                  ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800"
+                                  : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
+                              )}
+                            >
+                              <span className={selectedContext === ctx.id ? "text-primary-600" : "text-gray-500"}>
+                                {ctx.icon}
+                              </span>
+                              <span>{ctx.label}</span>
+                              {selectedContext === ctx.id && (
+                                <motion.div layoutId="active-dot" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
+                              )}
+                            </div>
+                          ))}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                )}
 
                 {/* Conversations - only show in chat view */}
                 {activeView === 'chat' && (
@@ -523,30 +553,52 @@ function ChatApp() {
                 )}
               </div>
 
-              <div className="p-4 border-t border-gray-100 dark:border-gray-800 space-y-4">
+              <div className="p-4 border-t border-gray-100 dark:border-gray-800 relative" ref={profileMenuRef}>
+                <AnimatePresence>
+                  {isProfileMenuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.15 }}
+                      className="absolute bottom-full left-4 right-4 mb-2 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-100 dark:border-gray-700 overflow-hidden"
+                    >
+                      <button
+                        onClick={() => {
+                          setIsDarkMode(!isDarkMode);
+                          setIsProfileMenuOpen(false);
+                        }}
+                        className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+                      >
+                        {isDarkMode ? <Sun size={18} className="text-gray-500" /> : <Moon size={18} className="text-gray-500" />}
+                        <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          logout();
+                          setIsProfileMenuOpen(false);
+                        }}
+                        className="flex items-center gap-3 w-full px-4 py-3 text-sm font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors border-t border-gray-100 dark:border-gray-700"
+                      >
+                        <LogOut size={18} className="text-red-500" />
+                        <span>Logout</span>
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
                 <button
-                  onClick={() => setIsDarkMode(!isDarkMode)}
-                  className="flex items-center gap-3 w-full px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                  onClick={() => setIsProfileMenuOpen(!isProfileMenuOpen)}
+                  className="flex items-center gap-3 w-full p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors text-left"
                 >
-                  {isDarkMode ? <Sun size={18} /> : <Moon size={18} />}
-                  <span>{isDarkMode ? 'Light Mode' : 'Dark Mode'}</span>
-                </button>
-                <button
-                  onClick={logout}
-                  className="flex items-center gap-3 w-full px-3 py-2 text-sm font-medium text-red-600 dark:text-red-400 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
-                >
-                  <LogOut size={18} />
-                  <span>Logout</span>
-                </button>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-primary-600 dark:text-primary-400">
+                  <div className="w-10 h-10 rounded-full bg-primary-100 dark:bg-primary-900 flex items-center justify-center text-primary-600 dark:text-primary-400 shrink-0">
                     <User size={20} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 dark:text-white truncate">{user?.username || 'Developer'}</p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">{user?.role?.replace('_', ' ') || 'User'}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 capitalize truncate">{user?.role?.replace('_', ' ') || 'User'}</p>
                   </div>
-                </div>
+                </button>
               </div>
             </motion.aside>
           )}

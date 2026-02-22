@@ -88,6 +88,10 @@ class InferenceLogEntry:
     reranking_time_ms: float = 0
     llm_time_ms: float = 0
     
+    # Token usage
+    input_tokens: Optional[int] = None   # LLM prompt tokens
+    output_tokens: Optional[int] = None  # LLM completion tokens
+    
     # Graph Enhancement
     graph_used: bool = False
     graph_context: Optional[Dict[str, Any]] = None
@@ -377,10 +381,19 @@ class InferenceLogger:
             chunk_log.stage = "final"
             chunk_log.included_in_context = True
     
-    def log_llm_generation(self, llm_time_ms: float) -> None:
-        """Log LLM response generation time"""
+    def log_llm_generation(
+        self,
+        llm_time_ms: float,
+        input_tokens: Optional[int] = None,
+        output_tokens: Optional[int] = None
+    ) -> None:
+        """Log LLM response generation time and token usage"""
         if self.current_log:
             self.current_log.llm_time_ms = llm_time_ms
+            if input_tokens is not None:
+                self.current_log.input_tokens = input_tokens
+            if output_tokens is not None:
+                self.current_log.output_tokens = output_tokens
     
     def log_error(self, error_message: str) -> None:
         """Log an error during inference"""
@@ -483,6 +496,8 @@ class InferenceLogger:
                 retrieval_time_ms=log_entry.retrieval_time_ms,
                 reranking_time_ms=log_entry.reranking_time_ms,
                 llm_time_ms=log_entry.llm_time_ms,
+                input_tokens=log_entry.input_tokens,
+                output_tokens=log_entry.output_tokens,
                 user_id=log_entry.user_id,
                 conversation_id=log_entry.conversation_id,
                 session_id=log_entry.session_id,

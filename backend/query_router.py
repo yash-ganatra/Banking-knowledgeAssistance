@@ -1207,19 +1207,25 @@ class UnifiedQueryEngine:
         
         # Step 5: Generate LLM response
         llm_response = None
+        input_tokens = None
+        output_tokens = None
         llm_start = time.time()
         if self.llm_service:
             system_prompt = self._build_system_prompt(sources_to_query, intent)
-            llm_response = self.llm_service.generate_response(
+            llm_response, input_tokens, output_tokens = self.llm_service.generate_response(
                 system_prompt,
                 query,
                 context
             )
         llm_time_ms = (time.time() - llm_start) * 1000
         
-        # Log LLM time
+        # Log LLM time and token usage
         if inference_logger:
-            inference_logger.log_llm_generation(llm_time_ms)
+            inference_logger.log_llm_generation(
+                llm_time_ms,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens
+            )
         
         return {
             "routing_decision": intent.to_dict(),

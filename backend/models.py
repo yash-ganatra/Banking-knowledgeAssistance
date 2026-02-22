@@ -152,6 +152,10 @@ class InferenceLog(Base):
     reranking_time_ms = Column(Float, nullable=True)
     llm_time_ms = Column(Float, nullable=True)
     
+    # Token Usage (from LLM response)
+    input_tokens = Column(Integer, nullable=True)   # prompt tokens consumed
+    output_tokens = Column(Integer, nullable=True)  # completion tokens generated
+    
     # User/Session Info
     user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     conversation_id = Column(Integer, ForeignKey("conversations.id", ondelete="SET NULL"), nullable=True)

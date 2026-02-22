@@ -99,6 +99,10 @@ class InferenceLogResponse(BaseModel):
     reranking_time_ms: Optional[float]
     llm_time_ms: Optional[float]
     
+    # Token usage
+    input_tokens: Optional[int] = None
+    output_tokens: Optional[int] = None
+    
     # Status
     success: bool
     error_message: Optional[str]
@@ -122,6 +126,8 @@ class InferenceLogSummary(BaseModel):
     failed_queries: int
     avg_response_time_ms: float
     avg_chunks_retrieved: float
+    avg_input_tokens: float
+    avg_output_tokens: float
     sources_breakdown: dict
     query_types_breakdown: dict
 
@@ -190,6 +196,8 @@ async def get_logs_summary(
             failed_queries=0,
             avg_response_time_ms=0,
             avg_chunks_retrieved=0,
+            avg_input_tokens=0,
+            avg_output_tokens=0,
             sources_breakdown={},
             query_types_breakdown={}
         )
@@ -205,6 +213,12 @@ async def get_logs_summary(
     # Average chunks
     chunks = [log.chunks_after_reranking for log in logs if log.chunks_after_reranking]
     avg_chunks = sum(chunks) / len(chunks) if chunks else 0
+    
+    # Average tokens
+    in_tokens = [log.input_tokens for log in logs if log.input_tokens]
+    avg_in_tokens = sum(in_tokens) / len(in_tokens) if in_tokens else 0
+    out_tokens = [log.output_tokens for log in logs if log.output_tokens]
+    avg_out_tokens = sum(out_tokens) / len(out_tokens) if out_tokens else 0
     
     # Sources breakdown
     sources_count = {}
@@ -225,6 +239,8 @@ async def get_logs_summary(
         failed_queries=failed,
         avg_response_time_ms=round(avg_time, 2),
         avg_chunks_retrieved=round(avg_chunks, 2),
+        avg_input_tokens=round(avg_in_tokens, 1),
+        avg_output_tokens=round(avg_out_tokens, 1),
         sources_breakdown=sources_count,
         query_types_breakdown=query_types_count
     )
