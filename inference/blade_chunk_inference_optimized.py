@@ -249,7 +249,7 @@ If the context doesn't contain enough information, say so."""
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
             ],
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",  # 8B: fast, cost-efficient
             temperature=0.2,
         )
         return chat_completion.choices[0].message.content

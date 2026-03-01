@@ -144,7 +144,7 @@ Remember:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_message}
             ],
-            model="llama-3.3-70b-versatile",  # You can change to other models like "mixtral-8x7b-32768"
+            model="llama-3.1-8b-instant",  # 8B: fast, cost-efficient, sufficient for RAG
             temperature=0.3,
             max_tokens=4096,
             top_p=0.9

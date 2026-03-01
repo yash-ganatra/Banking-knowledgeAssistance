@@ -183,12 +183,11 @@ class GroqRateLimiter:
         self.token_tracker = TokenUsageTracker(daily_limit=daily_token_limit)
         self.cache = ResponseCache(ttl_seconds=cache_ttl) if enable_cache else None
         
-        # Default fallback models (from most capable to least, all free tier)
+        # Default fallback models (~10B range: fast, cost-efficient, sufficient for RAG)
         self.fallback_models = fallback_models or [
-            "llama-3.3-70b-versatile",  # Primary model
-            "llama-3.1-70b-versatile",  # Fallback 1
-            "llama-3.1-8b-instant",      # Fallback 2 (faster, cheaper)
-            "mixtral-8x7b-32768"         # Fallback 3
+            "llama-3.1-8b-instant",  # Primary: 8B, 128K context, fastest on Groq
+            "gemma2-9b-it",          # Fallback 1: 9B, great instruction following
+            "llama3-8b-8192",        # Fallback 2: 8B, stable alternative
         ]
         
         self.current_model_index = 0
@@ -272,7 +271,7 @@ class GroqRateLimiter:
             pass
         
         # If current model not in list or no more fallbacks, use fastest model
-        return "llama-3.1-8b-instant"
+        return "llama3-8b-8192"
     
     def with_retry(self, func: Callable) -> Callable:
         """

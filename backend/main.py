@@ -216,7 +216,7 @@ class LLMService:
         # Initialize output filter for response sanitization
         self.output_filter = OutputFilter(strict_mode=True)
 
-    def generate_response(self, system_prompt: str, user_query: str, context: str, model: str = "llama-3.3-70b-versatile"):
+    def generate_response(self, system_prompt: str, user_query: str, context: str, model: str = "llama-3.1-8b-instant"):
         """Generate LLM response with retry logic, caching, and security filtering.
         
         Returns:

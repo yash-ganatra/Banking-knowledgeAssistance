@@ -236,22 +236,32 @@ A: MATCH (a1:Action)-[:ACTION_CALLS_ACTION]->(a2:Action)
             logger.error(f"TextToCypher generation failed: {e}")
             return None
     
-    def execute_cypher(self, cypher: str) -> Optional[List[Dict[str, Any]]]:
+    def execute_cypher(self, cypher: str, hard_limit: int = 100) -> Optional[List[Dict[str, Any]]]:
         """
         Execute a Cypher query and return results as a list of dicts.
         
         Args:
             cypher: Cypher query string
+            hard_limit: Safety cap on rows returned. Prevents runaway queries
+                        (e.g. 937-row cartesian joins) from blowing up the LLM context.
             
         Returns:
             List of result records as dicts, or None on error
         """
         try:
+            # Inject LIMIT if the generated Cypher has none
+            if 'LIMIT' not in cypher.upper():
+                cypher = f"{cypher.rstrip(';')} LIMIT {hard_limit}"
+                logger.info(f"No LIMIT in Cypher — injected LIMIT {hard_limit}")
+            
             with self.conn.session() as session:
                 result = session.run(cypher)
                 records = []
                 for record in result:
                     records.append(dict(record))
+                    if len(records) >= hard_limit:
+                        logger.info(f"Hit hard_limit={hard_limit}, stopping record fetch")
+                        break
                 return records
         except Exception as e:
             logger.error(f"TextToCypher execution failed: {e}")
@@ -326,20 +336,34 @@ Generate ONLY the corrected Cypher query, nothing else. Remember: READ-ONLY quer
         if not records:
             return "No results found in the graph database."
         
-        lines = [f"### Graph Analytics Results ({len(records)} records):\n"]
+        total_records = len(records)
+        MAX_ROWS = 50
+        MAX_CHARS = 4000
+        display_records = records[:MAX_ROWS]
+        
+        lines = [f"### Graph Analytics Results ({total_records} records total, showing top {len(display_records)}):\n"]
         
         # Get column keys from first record
         keys = list(records[0].keys())
         
+        total_chars = len(lines[0])
         # Build a table-like format
-        for i, record in enumerate(records, 1):
+        for i, record in enumerate(display_records, 1):
             parts = []
             for key in keys:
                 value = record[key]
                 # Format key nicely
                 display_key = key.replace('_', ' ').title()
                 parts.append(f"{display_key}: **{value}**")
-            lines.append(f"{i}. {' | '.join(parts)}")
+            line = f"{i}. {' | '.join(parts)}"
+            total_chars += len(line) + 1
+            if total_chars > MAX_CHARS:
+                lines.append(f"... [{total_records - i + 1} more records omitted to fit context window]")
+                break
+            lines.append(line)
+        
+        if total_records > MAX_ROWS:
+            lines.append(f"\n*Note: {total_records - MAX_ROWS} additional records omitted for context limit.*")
         
         return "\n".join(lines)
     

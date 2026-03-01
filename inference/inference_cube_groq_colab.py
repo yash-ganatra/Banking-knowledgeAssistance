@@ -74,7 +74,7 @@ class CUBEGroqInference:
         collection_name: str = "cube_docs_optimized",
         embedding_model: str = "BAAI/bge-m3",
         groq_api_key: Optional[str] = None,
-        groq_model: str = "llama-3.3-70b-versatile",
+        groq_model: str = "llama-3.1-8b-instant",
         use_gpu: bool = True
     ):
         self.db_path = db_path
@@ -376,7 +376,7 @@ def main():
         db_path="/content/chroma_db",
         collection_name="cube_docs_optimized",
         embedding_model="BAAI/bge-m3",
-        groq_model="llama-3.3-70b-versatile",
+        groq_model="llama-3.1-8b-instant",  # 8B: fast, cost-efficient, sufficient for RAG
         use_gpu=True
     )
     

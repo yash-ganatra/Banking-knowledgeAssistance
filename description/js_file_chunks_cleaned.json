@@ -19953,5 +19953,27 @@
     "callback_function": null,
     "calling_functions": [],
     "description": "Saves user management dashboard data, processing user details and column data, and redirects to the dashboard upon successful save operation. \n\nThe endpoint handles AJAX requests to update user details and column data, processing parameters such as ID, secure, comments, EMPLDAPUSERID, formId, RM_CODE, functionName, field_value, rowId, and id. \n\nThe successful save operation triggers a redirect to the dashboard, while an unsuccessful save displays a warning message."
+  },
+  {
+    "chunk_id": "a954e0f9144ebf3fa6f2de5c7b42435d",
+    "chunk_type": "js_function",
+    "function_name": "rsenc",
+    "also_defines": "decPubStr",
+    "file_name": "addaccount.blade.php (inline JS)",
+    "file_path": "code/code/resources/views/bank/addaccount.blade.php",
+    "also_in_files": [
+      "code/code/resources/views/bank/addovddocuments.blade.php",
+      "code/code/resources/views/amend/amenduploaddocument_v2.blade.php"
+    ],
+    "line_start": 1005,
+    "parameters": [
+      "data",
+      "publicKey"
+    ],
+    "js_library": "jsrsasign (KEYUTIL, KJUR.crypto.Cipher, hextob64)",
+    "source_type": "blade_inline_js",
+    "description": "The `rsenc` function performs RSA public-key encryption of sensitive data (e.g. PAN numbers) on the client side. It reads the RSA public key from the hidden `#pubki` HTML element, reconstructs it by calling `decPubStr()` to decode obfuscated key prefix/suffix strings, then uses the jsrsasign library (`KEYUTIL.getKey`, `KJUR.crypto.Cipher.encrypt`, `hextob64`) to encrypt the input `data` and return it as a Base64 string. If the public key element is missing, it alerts 'Encryption Failed!' and returns false. It is defined as inline JavaScript in blade templates and called before AJAX requests to protect PAN numbers in transit.",
+    "description_enhanced": true,
+    "code_snippet": "function rsenc(data, publicKey) {\n    var publicKey = document.getElementById('pubki');    \n    if(publicKey && publicKey != null){\n        publicKey = decPubStr(_encPubStrB)+publicKey.value+decPubStr(_encPubStrE);\n        const f_publicKey = KEYUTIL.getKey(publicKey);\n        // Encrypt the data using public key\n        const encryptedData = KJUR.crypto.Cipher.encrypt(data, f_publicKey);\n        const encryptedBase64 = hextob64(encryptedData);\n        return encryptedBase64;\n    }else{\n        alert('Encryption Failed!');\n        return false;\n    }\n}\n\nfunction decPubStr(_i='') {\n  let _d = [];\n  for (let i = 0; i < _i.length; i++) {\n    const xv = _i[i]; const flpd = parseInt(xv, 16);\n    const cc = ~flpd; const _o = String.fromCharCode(cc);\n    _d += _o;\n  }\n  return _d;\n}"
   }
 ]

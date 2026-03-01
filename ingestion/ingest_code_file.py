@@ -113,7 +113,7 @@ class DescriptionGenerator:
     Uses the EXACT same prompts as the original bulk enhancement scripts.
     """
 
-    def __init__(self, groq_api_key: str = None, model: str = "llama-3.3-70b-versatile"):
+    def __init__(self, groq_api_key: str = None, model: str = "llama-3.1-8b-instant"):
         self.api_key = groq_api_key or os.getenv("GROQ_API_KEY")
         if not self.api_key:
             raise ValueError(
