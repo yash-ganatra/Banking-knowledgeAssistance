@@ -1,4 +1,4 @@
-# 🏦 Banking Knowledge Assistant
+# Banking Knowledge Assistant
 
 <div align="center">
 
@@ -15,25 +15,24 @@
 
 ---
 
-## 📋 Table of Contents
+## Table of Contents
 
-1. [Project Overview](#-project-overview)
-2. [Architecture](#-architecture)
-3. [Core RAG Pipeline](#-core-rag-pipeline)
-4. [Knowledge Base Sync](#-knowledge-base-sync)
-5. [Log Analyzer](#-log-analyzer)
-6. [Neo4j Knowledge Graph](#-neo4j-knowledge-graph)
-7. [Vector Database & Chunking Strategy](#-vector-database--chunking-strategy)
-8. [Hybrid Search System](#-hybrid-search-system)
-9. [Authentication & Security](#-authentication--security)
-10. [API Reference](#-api-reference)
-11. [Setup & Installation](#-setup--installation)
-12. [Project Structure](#-project-structure)
-13. [Performance & Metrics](#-performance--metrics)
+1. [Project Overview](#project-overview)
+2. [Architecture](#architecture)
+3. [Core RAG Pipeline](#core-rag-pipeline)
+4. [Knowledge Base Sync](#knowledge-base-sync)
+5. [Log Analyzer](#log-analyzer)
+6. [Neo4j Knowledge Graph](#neo4j-knowledge-graph)
+7. [Vector Database & Chunking Strategy](#vector-database--chunking-strategy)
+8. [Hybrid Search System](#hybrid-search-system)
+9. [Authentication & Security](#authentication--security)
+10. [Project Structure](#project-structure)
+11. [Performance & Metrics](#performance--metrics)
+12. [Related Documentation](#related-documentation)
 
 ---
 
-## 🎯 Project Overview
+## Project Overview
 
 The **Banking Knowledge Assistant** is an enterprise-grade Retrieval-Augmented Generation (RAG) system that provides intelligent query responses across multiple knowledge domains in a banking codebase context. It combines vector search, a knowledge graph, and LLM reasoning to answer questions about business documentation, backend code (PHP/Laravel), frontend code (JavaScript/React), and UI templates (Blade).
 
@@ -52,7 +51,7 @@ The **Banking Knowledge Assistant** is an enterprise-grade Retrieval-Augmented G
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### Technology Stack
 
@@ -134,7 +133,7 @@ graph TB
 
 ---
 
-## 🔀 Core RAG Pipeline
+## Core RAG Pipeline
 
 Every query flows through a multi-stage pipeline: classification → retrieval → fusion → reranking → (optional) graph enhancement → LLM generation.
 
@@ -207,7 +206,7 @@ The system handles Groq API constraints with automatic retry, caching, and intel
 
 ---
 
-## 🔄 Knowledge Base Sync
+## Knowledge Base Sync
 
 **Location:** `backend/routers/sync_routes.py`, `ingestion/ingest_code_file.py`
 
@@ -239,32 +238,9 @@ graph LR
 | **BM25 Rebuild** | Rebuild BM25 indices for affected sources | Only touched sources rebuilt |
 | **Graph Update** | Re-parse routes, controllers, views → update Neo4j | Full graph rebuild via `build_graph.py` |
 
-### API
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/sync/start` | POST | Start sync (returns SSE stream with progress events) |
-| `/api/sync/status` | GET | Check if a sync is currently running |
-
-### SSE Event Format
-
-```json
-{
-  "step": "embedding",
-  "step_index": 3,
-  "total_steps": 6,
-  "status": "processing",
-  "current_file": "app/Http/Controllers/UserController.php",
-  "file_index": 5,
-  "files_added": 2,
-  "files_modified": 3,
-  "files_deleted": 0
-}
-```
-
 ---
 
-## 📋 Log Analyzer
+## Log Analyzer
 
 **Location:** `backend/log_analyzer.py`, `backend/routers/log_analyzer_routes.py`
 
@@ -288,13 +264,6 @@ graph LR
 | **Deduplicator** | `LogDeduplicator` | Groups identical errors using `hash(error_message + origin_file + origin_line)`, tracks occurrence count and first/last seen timestamps |
 | **Analyzer** | `LogAnalyzer` | Orchestrates the full pipeline: parse → deduplicate → retrieve code context (via `CodeQueryEngine`) → LLM root cause analysis per unique error |
 
-### API
-
-| Endpoint | Method | Description |
-|---|---|---|
-| `/api/log-analyzer/parse` | POST | Parse and deduplicate (no LLM). Returns error summary for preview. Max 10 MB |
-| `/api/log-analyzer/analyze` | POST | Full pipeline: parse → retrieve context → LLM root cause. Accepts optional `selected_errors` (comma-separated fingerprints) and `top_k_context` |
-
 ### Output Per Error
 
 Each analyzed error returns:
@@ -306,7 +275,7 @@ Each analyzed error returns:
 
 ---
 
-## 🕸️ Neo4j Knowledge Graph
+## Neo4j Knowledge Graph
 
 **Location:** `utils/graph_db.py`, `utils/graph_enhanced_retriever.py`, `scripts/build_graph.py`
 
@@ -359,7 +328,7 @@ The graph enhancement is applied selectively based on query type (code queries b
 
 ---
 
-## 📦 Vector Database & Chunking Strategy
+## Vector Database & Chunking Strategy
 
 ### Vector Collections
 
@@ -380,7 +349,7 @@ Blade templates can be very large (260K+ chars). The system uses a two-phase app
 
 ---
 
-## 🔍 Hybrid Search System
+## Hybrid Search System
 
 **Location:** `utils/hybrid_search.py`, `utils/bm25_index.py`
 
@@ -402,17 +371,9 @@ Combines sparse keyword search (BM25) with dense semantic search (BGE-M3). BM25 
 | Semantic queries | ~90% | ~90% | 0% (no degradation) |
 | Mixed (concept + identifier) | ~70% | ~90% | **+20%** |
 
-### Building Indices
-
-```bash
-python scripts/build_bm25_indices.py --all        # Build for all sources
-python scripts/build_bm25_indices.py --source php_code  # Single source
-python scripts/build_bm25_indices.py --all --test  # Build and test
-```
-
 ---
 
-## 🔐 Authentication & Security
+## Authentication & Security
 
 The system implements JWT-based authentication with role-based access control:
 
@@ -434,149 +395,7 @@ The system implements JWT-based authentication with role-based access control:
 
 ---
 
-## 🌐 API Reference
-
-### RAG Inference
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/inference/smart` | POST | ❌ | Auto-routed query with intent classification |
-| `/inference/business` | POST | ❌ | Query business documentation |
-| `/inference/php` | POST | ❌ | Query PHP code knowledge |
-| `/inference/js` | POST | ❌ | Query JavaScript code knowledge |
-| `/inference/blade` | POST | ❌ | Query Blade template knowledge |
-
-### Authentication
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/auth/signup` | POST | ❌ | Register new user |
-| `/api/auth/login-json` | POST | ❌ | Login (JSON body) |
-| `/api/auth/me` | GET | ✅ | Get current user profile |
-
-### Chat History
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/chat/conversations` | GET | ✅ | List user's conversations |
-| `/api/chat/conversations` | POST | ✅ | Create new conversation |
-| `/api/chat/conversations/{id}` | GET | ✅ | Get conversation with messages |
-| `/api/chat/conversations/{id}` | PATCH | ✅ | Update conversation title |
-| `/api/chat/conversations/{id}` | DELETE | ✅ | Delete conversation |
-| `/api/chat/conversations/{id}/messages` | POST | ✅ | Add message |
-
-### Knowledge Base Sync
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/sync/start` | POST | ❌ | Start sync (SSE stream) |
-| `/api/sync/status` | GET | ❌ | Check sync status |
-
-### Log Analyzer
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/log-analyzer/parse` | POST | ❌ | Parse and deduplicate log file (preview) |
-| `/api/log-analyzer/analyze` | POST | ❌ | Full analysis with LLM root cause |
-
-### Code Review
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/api/code-review` | POST | ✅ | AI-powered code review (PHP, JS, SQL) |
-
-### Inference Logs
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/inference-logs/` | GET | ❌ | List logs with filters (time, source, success) |
-| `/inference-logs/summary` | GET | ❌ | Aggregate statistics |
-| `/inference-logs/{id}` | GET | ❌ | Full log details |
-| `/inference-logs/{id}/pipeline` | GET | ❌ | Pipeline visualization data |
-
-### System
-
-| Endpoint | Method | Auth | Description |
-|---|---|---|---|
-| `/health` | GET | ❌ | Health check with component status |
-| `/api/token-usage` | GET | ❌ | Groq API token usage stats |
-| `/api/clear-cache` | POST | ❌ | Clear LLM response cache |
-
----
-
-## 📥 Setup & Installation
-
-### Prerequisites
-
-| Requirement | Version | Purpose |
-|---|---|---|
-| Python | 3.8+ | Backend |
-| Node.js | 16+ | Frontend |
-| PostgreSQL | 12+ | Users, conversations, inference logs |
-| Neo4j | 5.0+ | Knowledge graph (optional) |
-| RAM | 8GB+ | Embedding models (BGE-M3 + Cross-Encoder) |
-| Disk | 10GB+ | Models + vector databases |
-
-### Quick Start
-
-```bash
-# 1. Clone and install
-cd Banking-knowledgeAssistance
-pip install -r requirements.txt
-
-# 2. Configure environment
-cp .env.example .env
-# Edit .env → set GROQ_API_KEY, DATABASE_URL, (optional) NEO4J_PASSWORD
-
-# 3. Set up PostgreSQL
-createdb banking_assistant
-# Or: ./setup_database.sh
-
-# 4. Start backend (auto-creates tables on first run)
-cd backend && python main.py
-# → http://localhost:8000  (API docs at /docs)
-
-# 5. Start frontend
-cd frontend && npm install && npm run dev
-# → http://localhost:5173
-```
-
-### Environment Variables
-
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `GROQ_API_KEY` | ✅ | — | Groq API key |
-| `DATABASE_URL` | ✅ | — | PostgreSQL connection string |
-| `SECRET_KEY` | ✅ | — | JWT signing secret (54+ chars) |
-| `NEO4J_URI` | ❌ | `bolt://localhost:7687` | Neo4j connection URI |
-| `NEO4J_USER` | ❌ | `neo4j` | Neo4j username |
-| `NEO4J_PASSWORD` | ❌ | — | Neo4j password |
-| `DB_POOL_SIZE` | ❌ | `5` | PostgreSQL connection pool size |
-| `DB_MAX_OVERFLOW` | ❌ | `10` | Max overflow connections |
-
-### Full Data Pipeline (Rebuild from Scratch)
-
-```bash
-# Chunk → Embed → Index for each domain
-python utils/chunk_cube_docs_optimized.py           # Business docs
-python embedding_vectordb/embed_cube_optimized_chunks.py
-
-python utils/chunk_php_metadata.py                  # PHP code
-python embedding_vectordb/embed_php_chunks_to_chromadb.py
-
-python utils/chunk_js_files.py                      # JavaScript
-python embedding_vectordb/embed_js_chunk_to_chromadb.py
-
-python utils/chunk_views_blade.py                   # Blade templates
-python embedding_vectordb/embed_blade_chunks.py
-
-python scripts/build_bm25_indices.py --all          # BM25 indices
-python scripts/build_graph.py                       # Neo4j graph
-```
-
----
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 Banking-knowledgeAssistance/
@@ -633,7 +452,7 @@ Banking-knowledgeAssistance/
 
 ---
 
-## 📊 Performance & Metrics
+## Performance & Metrics
 
 ### Retrieval Accuracy
 
@@ -672,19 +491,9 @@ Banking-knowledgeAssistance/
 
 ---
 
-## 📝 Related Documentation
+## Related Documentation
 
 - [CHAT_HISTORY_GUIDE.md](./CHAT_HISTORY_GUIDE.md) — Chat history quick start
 - [DATABASE_SETUP.md](./DATABASE_SETUP.md) — PostgreSQL setup and configuration
 - [RATE_LIMIT_HANDLING_GUIDE.md](./RATE_LIMIT_HANDLING_GUIDE.md) — Rate limiting documentation
 - [SMART_ROUTER_GUIDE.md](./SMART_ROUTER_GUIDE.md) — Smart query router guide
-
----
-
-<div align="center">
-
-**Built with ❤️ for Banking Knowledge Management**
-
-*Powered by BGE-M3 · ChromaDB · Neo4j · FastAPI · React · Groq*
-
-</div>
