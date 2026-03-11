@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, ChevronDown, ChevronRight, Database, FileText, FileCode, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Moon, Sun, LogOut, Activity, RefreshCw, Search } from 'lucide-react';
+import { Send, Menu, Bot, User, Shield, Code, ChevronLeft, ChevronDown, ChevronRight, Database, FileText, FileCode, Plus, Trash2, MessageSquare, PanelLeftClose, PanelLeft, Moon, Sun, LogOut, Activity, RefreshCw, Search, ScrollText } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { RotatingCube } from './components/RotatingCube';
 import { BackgroundEffects } from './components/BackgroundEffects';
@@ -7,6 +7,7 @@ import { MermaidDiagram } from './components/MermaidDiagram';
 import CodeReview from './components/CodeReview';
 import InferenceLogs from './components/InferenceLogs';
 import SyncKnowledgeBase from './components/SyncKnowledgeBase';
+import LogAnalyzer from './components/LogAnalyzer';
 import SearchModal from './components/SearchModal';
 import { useAuth } from './contexts/AuthContext';
 
@@ -16,7 +17,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 function ChatApp() {
   const { user, logout, loading: authLoading } = useAuth();
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [activeView, setActiveView] = useState('chat'); // 'chat', 'code-review', or 'inference-logs'
+  const [activeView, setActiveView] = useState('chat'); // 'chat', 'code-review', 'inference-logs', or 'log-analyzer'
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
@@ -346,7 +347,7 @@ function ChatApp() {
       {/* Background Cube and Effects */}
       <BackgroundEffects isDarkMode={isDarkMode} />
       <AnimatePresence>
-        {!hasUserInteracted && activeView !== 'code-review' && activeView !== 'inference-logs' && (
+        {!hasUserInteracted && activeView !== 'code-review' && activeView !== 'inference-logs' && activeView !== 'log-analyzer' && (
           <div className="fixed inset-0 z-0 flex items-center justify-center pointer-events-none">
             <RotatingCube layoutId="cube-main" size={180} textColor="text-blue-600 dark:text-blue-400" />
           </div>
@@ -425,6 +426,21 @@ function ChatApp() {
                     <Activity size={18} />
                     <span>Inference Logs</span>
                     {activeView === 'inference-logs' && (
+                      <motion.div layoutId="active-capability" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
+                    )}
+                  </div>
+                  <div
+                    onClick={() => setActiveView('log-analyzer')}
+                    className={cn(
+                      "group flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-lg cursor-pointer transition-colors",
+                      activeView === 'log-analyzer'
+                        ? "bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 ring-1 ring-primary-200 dark:ring-primary-800"
+                        : "text-gray-700 dark:text-gray-300 hover:bg-primary-50 dark:hover:bg-primary-900/30 hover:text-primary-700 dark:hover:text-primary-300"
+                    )}
+                  >
+                    <ScrollText size={18} />
+                    <span>Log Analyzer</span>
+                    {activeView === 'log-analyzer' && (
                       <motion.div layoutId="active-capability" className="ml-auto w-1.5 h-1.5 rounded-full bg-primary-500" />
                     )}
                   </div>
@@ -614,7 +630,7 @@ function ChatApp() {
                 </button>
               )}
               <h1 className="font-semibold text-gray-800 dark:text-white">
-                {activeView === 'code-review' ? 'Code Review Assistant' : activeView === 'inference-logs' ? 'Inference Logs' : 'Banking Assistant'}
+                {activeView === 'code-review' ? 'Code Review Assistant' : activeView === 'inference-logs' ? 'Inference Logs' : activeView === 'log-analyzer' ? 'Log Analyzer' : 'Banking Assistant'}
               </h1>
             </div>
           </header>
@@ -626,6 +642,8 @@ function ChatApp() {
             <div className="flex-1 overflow-y-auto h-full relative">
               <InferenceLogs />
             </div>
+          ) : activeView === 'log-analyzer' ? (
+            <LogAnalyzer isDarkMode={isDarkMode} />
           ) : (
             <>
               <div className="flex-1 overflow-y-auto p-4 lg:p-8 space-y-6">

@@ -5,7 +5,7 @@ from neo4j import GraphDatabase
 
 # Common passwords to test
 PASSWORDS_TO_TRY = [
-    "banking_rag_password",
+    "your_neo4j_password",
     "neo4j",
     "password",
     "12345678",
@@ -58,7 +58,7 @@ def main():
             
     if not success:
         print("\n❌ Could not connect with any common password.")
-        print("Please Reset Password in Neo4j Desktop to 'banking_rag_password'.")
+        print("Please Reset Password in Neo4j Desktop or set NEO4J_PASSWORD in .env.")
 
 if __name__ == "__main__":
     main()

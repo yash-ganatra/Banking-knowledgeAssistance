@@ -6,7 +6,7 @@ Run this after embedding the chunks
 import sys
 sys.path.append('..')
 
-from inference.query_cube_optimized import CUBEQueryEngine
+from inference.query_cube_optimized import BankingQueryEngine
 from inference.diagram_renderer import MermaidRenderer
 
 
@@ -17,12 +17,12 @@ def test_diagram_retrieval():
     print("="*80)
     
     # Initialize engine
-    engine = CUBEQueryEngine()
+    engine = BankingQueryEngine()
     
     # Test queries that should return diagrams
     test_queries = [
-        "Show me the NPC flow diagram",
-        "What is the CUBE architecture?",
+        "Show me the review flow diagram",
+        "What is the banking platform architecture?",
         "Admin API flow",
         "Application status flow"
     ]
@@ -52,7 +52,7 @@ def test_diagram_retrieval():
                 MermaidRenderer.save_html(
                     diagram['mermaid_code'],
                     filename,
-                    title=f"CUBE - {diagram['page_name']}"
+                    title=f"Banking - {diagram['page_name']}"
                 )
         else:
             print("  ⚠️  No diagrams found for this query")
@@ -69,13 +69,13 @@ def demonstrate_usage():
     print("DEMONSTRATION: Working with Mermaid Diagrams")
     print("="*80)
     
-    engine = CUBEQueryEngine()
+    engine = BankingQueryEngine()
     
     # Example 1: Get diagram and render in multiple formats
     print("\n1. Retrieve and convert diagram to different formats:")
     print("─"*80)
     
-    results = engine.query("CUBE flow diagram", top_k=5)
+    results = engine.query("banking flow diagram", top_k=5)
     diagrams = MermaidRenderer.extract_diagrams(results)
     
     if diagrams:
@@ -86,7 +86,7 @@ def demonstrate_usage():
         # Save as HTML
         MermaidRenderer.save_html(
             diagram['mermaid_code'],
-            'cube_flow.html',
+            'banking_flow.html',
             title=diagram['page_name']
         )
         
@@ -96,11 +96,11 @@ def demonstrate_usage():
             title=diagram['page_name']
         )
         
-        with open('cube_flow.md', 'w') as f:
+        with open('banking_flow.md', 'w') as f:
             f.write(markdown)
         
-        print("  ✓ Saved as HTML: cube_flow.html")
-        print("  ✓ Saved as Markdown: cube_flow.md")
+        print("  ✓ Saved as HTML: banking_flow.html")
+        print("  ✓ Saved as Markdown: banking_flow.md")
     
     # Example 2: Create gallery of all diagrams
     print("\n2. Create gallery of all diagrams:")
@@ -118,7 +118,7 @@ def demonstrate_usage():
 <!DOCTYPE html>
 <html>
 <head>
-    <title>CUBE Diagrams Gallery</title>
+    <title>Banking Diagrams Gallery</title>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
     <script>
         mermaid.initialize({ startOnLoad: true, theme: 'default' });
@@ -162,9 +162,9 @@ def demonstrate_usage():
     </style>
 </head>
 <body>
-    <h1>📊 CUBE Documentation - Diagram Gallery</h1>
+    <h1>📊 Banking Documentation - Diagram Gallery</h1>
     <p style="text-align: center; color: #7f8c8d;">
-        All process flows and architecture diagrams from CUBE documentation
+        All process flows and architecture diagrams from banking documentation
     </p>
 ''']
         
@@ -181,19 +181,19 @@ def demonstrate_usage():
         
         html_parts.append('</body></html>')
         
-        with open('cube_diagram_gallery.html', 'w', encoding='utf-8') as f:
+        with open('banking_diagram_gallery.html', 'w', encoding='utf-8') as f:
             f.write(''.join(html_parts))
         
-        print("  ✓ Created: cube_diagram_gallery.html")
+        print("  ✓ Created: banking_diagram_gallery.html")
         print("    Open in your browser to view all diagrams")
     
     print("\n" + "="*80)
     print("✓ Demonstration Complete!")
     print("\nGenerated files:")
     print("  - test_diagram_*.html (individual diagrams)")
-    print("  - cube_flow.html (example single diagram)")
-    print("  - cube_flow.md (markdown format)")
-    print("  - cube_diagram_gallery.html (all diagrams)")
+    print("  - banking_flow.html (example single diagram)")
+    print("  - banking_flow.md (markdown format)")
+    print("  - banking_diagram_gallery.html (all diagrams)")
     print("="*80)
 
 
@@ -210,4 +210,4 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ Error: {e}")
         print("\nMake sure you've run the embedding script first:")
-        print("  python embedding_vectordb/embed_cube_optimized_chunks.py")
+        print("  python embedding_vectordb/embed_banking_optimized_chunks.py")

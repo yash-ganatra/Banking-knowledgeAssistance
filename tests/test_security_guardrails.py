@@ -202,10 +202,10 @@ class TestOutputFilter:
     
     def test_groq_api_key_redacted(self, output_filter):
         """Test that Groq API keys are redacted"""
-        text = "The API key is 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"
+        text = "The API key is gsk_FAKE0000000000000000000000000000000000000000000000000"
         result = output_filter.filter_response(text)
         
-        assert "gsk_5AYz16" not in result.response
+        assert "gsk_FAKE" not in result.response
         assert "[REDACTED_GROQ_KEY]" in result.response
         assert result.redactions_made > 0
     

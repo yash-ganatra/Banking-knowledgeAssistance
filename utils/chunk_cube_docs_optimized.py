@@ -1,8 +1,9 @@
 """
-Optimized Chunking Strategy for CUBE Banking Documentation
+Optimized Chunking Strategy for Banking Documentation
 Creates semantically rich chunks with hierarchical metadata for maximum retrieval accuracy
 """
 
+import os
 import json
 import re
 from typing import List, Dict, Any, Set
@@ -14,7 +15,7 @@ import tiktoken
 encoding = tiktoken.get_encoding("cl100k_base")
 
 
-class CUBEDocumentChunker:
+class BankingDocumentChunker:
     def __init__(self, json_file_path: str):
         self.json_file_path = json_file_path
         self.data = None
@@ -43,9 +44,9 @@ class CUBEDocumentChunker:
                 'keywords': ['NRI', 'NRO', 'NRE', 'residential status', 'OCI', 'VISA', 'declaration']
             },
             'npc_process': {
-                'title': 'NPC Clearance Process - End to End',
+                'title': 'Document Clearance Process - End to End',
                 'page_ids': [302, 307],
-                'keywords': ['NPC', 'L1', 'L2', 'L3', 'reviewer', 'clearance', 'discrepancy']
+                'keywords': ['review', 'L1', 'L2', 'L3', 'reviewer', 'clearance', 'discrepancy']
             },
             'admin_apis': {
                 'title': 'Admin API Sequence - Customer & Account Creation',
@@ -490,7 +491,7 @@ class CUBEDocumentChunker:
     def run(self, output_file: str):
         """Run the complete chunking pipeline"""
         print("\n" + "="*60)
-        print("CUBE DOCUMENTATION CHUNKING - OPTIMIZED STRATEGY")
+        print("BANKING DOCUMENTATION CHUNKING - OPTIMIZED STRATEGY")
         print("="*60)
         
         self.load_data()
@@ -504,12 +505,12 @@ class CUBEDocumentChunker:
 
 
 def main():
-    # Configuration
-    input_file = "/Users/newusername/Desktop/RAG_bankingV.2/Banking-knowledgeAssistance/utils/output/final_clean_shelf3.json"
-    output_file = "/Users/newusername/Desktop/RAG_bankingV.2/Banking-knowledgeAssistance/chunks/cube_optimized_chunks.json"
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    input_file = os.path.join(project_root, "utils", "output", "final_clean_shelf3.json")
+    output_file = os.path.join(project_root, "chunks", "cube_optimized_chunks.json")
     
     # Run chunker
-    chunker = CUBEDocumentChunker(input_file)
+    chunker = BankingDocumentChunker(input_file)
     chunker.run(output_file)
     
     # Print sample chunks

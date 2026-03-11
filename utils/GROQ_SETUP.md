@@ -41,7 +41,7 @@ echo $GROQ_API_KEY
 ## 4. Run the Enhancement Script
 
 ```bash
-cd /Users/newusername/Desktop/RAG_bankingV.2/Banking-knowledgeAssistance/utils
+cd utils
 python enhance_descriptions_with_groq.py
 ```
 

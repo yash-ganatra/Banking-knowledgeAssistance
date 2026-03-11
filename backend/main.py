@@ -77,8 +77,7 @@ app.add_middleware(
 # --- Configuration ---
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
-    # Fallback to key found in notebook if not in env (For development only)
-    GROQ_API_KEY = "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"
+    logger.warning("GROQ_API_KEY not set in environment. LLM features will be disabled.")
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 VECTOR_DB_ROOT = os.path.join(PROJECT_ROOT, "vector_db")
@@ -314,6 +313,10 @@ def startup_event():
     from routers.sync_routes import router as sync_router
     app.include_router(sync_router)
     
+    # Include log analyzer routes
+    from routers.log_analyzer_routes import router as log_analyzer_router, init_log_analyzer
+    app.include_router(log_analyzer_router)
+    
     # Initialize Business Engine
     try:
         business_engine = BusinessQueryEngine()
@@ -387,6 +390,19 @@ def startup_event():
             logger.warning("⚠️ Unified Query Engine not initialized - some engines missing")
     except Exception as e:
         logger.error(f"Failed to initialize Unified Query Engine: {e}")
+
+    # Initialize Log Analyzer (uses existing PHP/Blade engines + LLM)
+    try:
+        from log_analyzer import LogAnalyzer
+        log_analyzer_instance = LogAnalyzer(
+            php_engine=php_engine,
+            blade_engine=blade_engine,
+            llm_service=llm_service
+        )
+        init_log_analyzer(log_analyzer_instance)
+        logger.info("✅ Log Analyzer Ready")
+    except Exception as e:
+        logger.error(f"Failed to initialize Log Analyzer: {e}")
 
 # --- Helper to Format Context ---
 def format_context(results: List[Dict]) -> str:

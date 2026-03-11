@@ -72,7 +72,7 @@ def interactive_query():
         print("\nQuery examples:")
         print("  1. How to fetch branches?")
         print("  2. Show me encryption code")
-        print("  3. NPC review workflow")
+        print("  3. Document review workflow")
         print("  4. AJAX calls in admin module")
         print("  5. Exit")
         
@@ -85,7 +85,7 @@ def interactive_query():
         queries = {
             '1': "How to fetch branches in admin module",
             '2': "Show me AES encryption implementation",
-            '3': "NPC review workflow click events",
+            '3': "Document review workflow click events",
             '4': "AJAX calls to save user details"
         }
         

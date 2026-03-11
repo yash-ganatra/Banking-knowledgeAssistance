@@ -201,6 +201,17 @@ class DescriptionGenerator:
                 )
                 desc = self._call_llm(JS_DESCRIPTION_SYSTEM, prompt, max_tokens=300)
 
+            elif chunk_type == "blade_inline_js":
+                # Inline JS function defined inside a <script> block in a Blade template.
+                # Uses the same prompt as a regular JS function.
+                prompt = get_js_function_description_prompt(
+                    function_name=chunk.get("function_name", ""),
+                    parameters=chunk.get("parameters", []),
+                    code_snippet=chunk.get("code_snippet", ""),
+                    dom_selectors=chunk.get("parent_file_dom_selectors"),
+                )
+                desc = self._call_llm(JS_DESCRIPTION_SYSTEM, prompt, max_tokens=300)
+
             elif chunk_type == "js_ajax_endpoint":
                 prompt = get_js_ajax_description_prompt(
                     endpoint_url=chunk.get("endpoint_url", ""),
@@ -306,6 +317,7 @@ def ingest_file(
     # Step 2: Parse the file
     logger.info("Step 1/5: Parsing...")
     chunks = []
+    inline_js_chunks: list = []  # blade inline-JS functions → routed to JS ChromaDB
 
     try:
         if file_type == "php":
@@ -336,8 +348,22 @@ def ingest_file(
                 logger.warning("  ⚠️  Parser returned no data")
 
         elif file_type == "blade":
-            # Blade chunker works directly from file content, no parser needed
-            chunks = chunk_blade_file(file_path, project_root)
+            # chunk_blade_file() returns both blade-section chunks AND
+            # blade_inline_js chunks (JS functions found inside <script> blocks).
+            # We split them here: blade chunks go to the blade collection,
+            # inline JS chunks go to the JS collection.
+            all_blade_chunks = chunk_blade_file(file_path, project_root)
+            inline_js_chunks = [
+                c for c in all_blade_chunks if c.get("chunk_type") == "blade_inline_js"
+            ]
+            chunks = [
+                c for c in all_blade_chunks if c.get("chunk_type") != "blade_inline_js"
+            ]
+            if inline_js_chunks:
+                logger.info(
+                    f"  ℹ️  {len(inline_js_chunks)} inline JS function(s) will be "
+                    f"embedded into the JS collection"
+                )
 
     except Exception as e:
         result["status"] = "error"
@@ -373,6 +399,13 @@ def ingest_file(
                 chunks = desc_gen.generate_js_descriptions(chunks)
             elif file_type == "blade":
                 chunks = desc_gen.generate_blade_descriptions(chunks)
+                # Also generate descriptions for any inline JS functions found
+                if inline_js_chunks:
+                    logger.info(
+                        f"  📝 Generating descriptions for {len(inline_js_chunks)} "
+                        f"inline JS function(s) in blade file..."
+                    )
+                    inline_js_chunks = desc_gen.generate_js_descriptions(inline_js_chunks)
 
         except Exception as e:
             result["errors"].append(f"Description generation failed: {str(e)}")
@@ -392,6 +425,13 @@ def ingest_file(
                 ref_path = chunks[0].get("metadata", {}).get("source", ref_path)
             deleted = delete_file_chunks(file_type, ref_path)
             result["chunks_deleted"] = deleted
+
+        # For blade files, also delete stale inline JS chunks from the JS collection.
+        # These are keyed by the blade file's relative path stored in metadata["file_path"].
+        if file_type == "blade" and inline_js_chunks:
+            js_ref_path = inline_js_chunks[0].get("file_path", "")
+            deleted_js = delete_file_chunks("js", js_ref_path)
+            result["chunks_deleted"] = result.get("chunks_deleted", 0) + deleted_js
     except Exception as e:
         result["errors"].append(f"Delete failed: {str(e)}")
         logger.warning(f"  ⚠️  Delete failed (continuing): {e}")
@@ -401,6 +441,15 @@ def ingest_file(
     try:
         embedded = upsert_chunks(file_type, chunks)
         result["chunks_embedded"] = embedded
+
+        # For blade files, also upsert inline JS chunks into the JS collection
+        if file_type == "blade" and inline_js_chunks:
+            embedded_inline_js = upsert_chunks("js", inline_js_chunks)
+            result["chunks_embedded"] += embedded_inline_js
+            logger.info(
+                f"  ✅ Also embedded {embedded_inline_js} inline JS chunk(s) "
+                f"into js_code_knowledge"
+            )
     except Exception as e:
         result["status"] = "error"
         result["errors"].append(f"Embedding failed: {str(e)}")

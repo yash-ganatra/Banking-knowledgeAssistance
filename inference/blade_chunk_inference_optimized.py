@@ -204,8 +204,8 @@ def search_blade_views_optimized(
 # ============================================================
 # CELL 7: LLM Integration
 # ============================================================
-GROQ_API_KEY = "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"
-groq_client = Groq(api_key=GROQ_API_KEY)
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 def format_compact_context(compact_results: List[Dict]) -> str:
     """Format compact results for LLM"""

@@ -12,3 +12,21 @@
 /vector_db
 
 /utils/output/*
+
+# === Sensitive data files (proprietary enterprise content) ===
+/chunks
+/description
+/bm25_indices
+/sync_manifest.json
+
+# Debug & test artifacts with sensitive content
+/debug_llm_input.txt
+/debug_blade_sample.py
+/debug_chroma.py
+/debug_chroma_collections.py
+/test_token.py
+/utils/push_views_md_1.py
+
+# Jupyter notebooks (contain hardcoded API keys and enterprise data)
+/inference/*.ipynb
+/embedding_vectordb/*.ipynb

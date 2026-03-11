@@ -1,5 +1,5 @@
 """
-CUBE Documentation RAG Inference with Groq API
+Banking Documentation RAG Inference with Groq API
 Optimized for Google Colab with BGE-M3 embeddings and Mermaid diagram rendering
 """
 
@@ -67,7 +67,7 @@ class MermaidRenderer:
             )
 
 
-class CUBEGroqInference:
+class BankingGroqInference:
     def __init__(
         self,
         db_path: str = "/content/chroma_db",
@@ -84,7 +84,7 @@ class CUBEGroqInference:
         # GPU configuration
         self.device = "cuda" if use_gpu and torch.cuda.is_available() else "cpu"
         
-        print("🔧 Initializing CUBE RAG Inference Engine...")
+        print("🔧 Initializing Banking RAG Inference Engine...")
         print(f"   Device: {self.device.upper()}")
         
         # Load embedding model
@@ -183,11 +183,11 @@ class CUBEGroqInference:
     ) -> str:
         """Generate response using Groq API"""
         
-        system_prompt = """You are an expert assistant for CUBE Banking Documentation, a digital account opening platform used by bank staff to create various types of customer accounts (Savings, Current, Term Deposits, NRI accounts, etc.).
+        system_prompt = """You are an expert assistant for Banking Documentation, a digital account opening platform used by bank staff to create various types of customer accounts (Savings, Current, Term Deposits, NRI accounts, etc.).
 
 Your expertise includes:
 - Account opening processes and workflows
-- Module functionalities (Branch, NPC, Admin, QC, Auditor, Archival, Inward)
+- Module functionalities (Branch, Review, Admin, QC, Auditor, Archival, Inward)
 - Compliance requirements (FATCA, FEMA, KYC, AML, PMLA, RBI guidelines)
 - Risk classification and customer onboarding
 - System architecture and API sequences
@@ -203,7 +203,7 @@ Guidelines:
 
 Be helpful, accurate, and professional."""
 
-        user_prompt = f"""Context from CUBE documentation:
+        user_prompt = f"""Context from banking documentation:
 
 {context}
 
@@ -311,7 +311,7 @@ Answer:"""
     def interactive_mode(self):
         """Interactive question-answering mode"""
         print("\n" + "="*80)
-        print("🎯 CUBE DOCUMENTATION - INTERACTIVE RAG")
+        print("🎯 BANKING DOCUMENTATION - INTERACTIVE RAG")
         print("="*80)
         print("\nCommands:")
         print("  - Type your question naturally")
@@ -372,7 +372,7 @@ def main():
         return
     
     # Initialize inference engine
-    engine = CUBEGroqInference(
+    engine = BankingGroqInference(
         db_path="/content/chroma_db",
         collection_name="cube_docs_optimized",
         embedding_model="BAAI/bge-m3",
@@ -387,7 +387,7 @@ def main():
     
     examples = [
         "What are the requirements for opening an NRI account?",
-        "How does the NPC clearance process work?",
+        "How does the document clearance process work?",
         "What is risk classification and how is it determined?",
         "Explain the Branch module functionality"
         

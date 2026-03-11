@@ -446,6 +446,91 @@ def _extract_js_function_code(lines: List[str], start_line: int, max_lines: int 
     return "\n".join(lines[idx : end_idx + 1])
 
 
+def _extract_blade_inline_js(
+    content: str,
+    lines: List[str],
+    rel_path: str,
+    filename: str,
+) -> List[Dict[str, Any]]:
+    """
+    Extract named JavaScript functions from <script> blocks inside a Blade template.
+
+    Scans every <script>…</script> block for ``function name(...)`` declarations,
+    extracts the function body via brace-depth tracking, and returns a list of
+    chunk dicts that share the same schema as JS function chunks so they can be
+    upserted directly into the ``js_code_knowledge`` ChromaDB collection.
+
+    Args:
+        content:   Full file content as a single string.
+        lines:     File content split into lines (for brace-depth extraction).
+        rel_path:  Relative path of the blade file (stored in chunk metadata).
+        filename:  Base filename of the blade file (e.g. ``addaccount.blade.php``).
+
+    Returns:
+        List of chunk dicts with ``chunk_type == "blade_inline_js"``.
+    """
+    chunks = []
+    # Strip the ".blade" part so "addaccount.blade" becomes "addaccount"
+    file_stem = re.sub(r"\.blade$", "", Path(filename).stem)
+
+    func_pattern = re.compile(r"function\s+([a-zA-Z_]\w*)\s*\(([^)]*)\)")
+    script_pattern = re.compile(
+        r"<script[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE
+    )
+
+    seen_funcs: set = set()  # avoid duplicate chunks for the same function name in the same file
+
+    for script_match in script_pattern.finditer(content):
+        script_body = script_match.group(1)
+        # Byte-offset where the script body starts inside the full file content
+        script_body_start = script_match.start(1)
+
+        for func_match in func_pattern.finditer(script_body):
+            func_name = func_match.group(1)
+            func_params_raw = func_match.group(2).strip()
+            param_list = [p.strip() for p in func_params_raw.split(",") if p.strip()]
+
+            # De-duplicate: keep only the first occurrence per (file, function) pair
+            dedup_key = f"{rel_path}::{func_name}"
+            if dedup_key in seen_funcs:
+                continue
+            seen_funcs.add(dedup_key)
+
+            # Convert byte-offset → 1-based line number
+            abs_pos = script_body_start + func_match.start()
+            line_num = content[:abs_pos].count("\n") + 1
+
+            code_snippet = _extract_js_function_code(lines, line_num, max_lines=80)
+            code_lines_count = code_snippet.count("\n") + 1 if code_snippet else 0
+
+            chunk_id = hashlib.md5(
+                f"blade_inline_js_{rel_path}_{func_name}_{line_num}".encode()
+            ).hexdigest()
+
+            chunk = {
+                "chunk_id": chunk_id,
+                "chunk_type": "blade_inline_js",
+                "language": "javascript",
+                "file_path": rel_path,
+                "file_name": filename,
+                "feature_domain": file_stem,
+                "function_name": func_name,
+                "parameters": param_list,
+                "endpoint_url": "",
+                "code_snippet": code_snippet,
+                "line_start": line_num,
+                "line_end": line_num + code_lines_count,
+                "code_lines": code_lines_count,
+                "description": "",
+                "description_enhanced": False,
+                "parent_file_dom_selectors": [],
+                "source_type": "blade_inline_js",
+            }
+            chunks.append(chunk)
+
+    return chunks
+
+
 # =============================================================================
 # BLADE CHUNKER — matches utils/chunk_views_blade.py schema
 # =============================================================================
@@ -550,5 +635,16 @@ def chunk_blade_file(
             }
         )
 
-    logger.info(f"  Blade chunked: {filename} → {len(chunks)} chunks")
+    logger.info(f"  Blade chunked: {filename} → {len(chunks)} blade chunks")
+
+    # -----------------------------------------------------------------------
+    # 3. Extract inline JavaScript functions from <script> blocks
+    # -----------------------------------------------------------------------
+    inline_js_chunks = _extract_blade_inline_js(content, content.split("\n"), rel_path, filename)
+    if inline_js_chunks:
+        logger.info(
+            f"  Blade inline JS: {filename} → {len(inline_js_chunks)} inline JS function(s)"
+        )
+        chunks.extend(inline_js_chunks)
+
     return chunks

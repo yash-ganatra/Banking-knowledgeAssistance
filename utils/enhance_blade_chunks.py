@@ -17,7 +17,7 @@ load_dotenv()
 # Configuration
 INPUT_FILE = "../chunks/blade_views_raw.json"
 OUTPUT_FILE = "../chunks/blade_views_enhanced.json"
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY") or "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" # Fallback setup key
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 
 GROQ_MODEL = "openai/gpt-oss-120b"
 MAX_TOKENS = 400

@@ -1,8 +1,9 @@
 """
-"""Advanced Query Interface for CUBE Documentation
+Advanced Query Interface for Banking Documentation
 Supports semantic search and metadata filtering
 """
 
+import os
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
@@ -10,7 +11,7 @@ from typing import List, Dict, Optional
 import json
 
 
-class CUBEQueryEngine:
+class BankingQueryEngine:
     def __init__(
         self,
         db_path: str = "./vector_db/cube_optimized_db",
@@ -20,7 +21,7 @@ class CUBEQueryEngine:
         self.db_path = db_path
         self.collection_name = collection_name
         
-        print("🔧 Initializing CUBE Query Engine...")
+        print("🔧 Initializing Banking Query Engine...")
         
         # Load embedding model
         print(f"  Loading embedding model: {embedding_model}")
@@ -45,12 +46,12 @@ class CUBEQueryEngine:
         include_synthetic: bool = True
     ) -> List[Dict]:
         """
-        Query the CUBE documentation
+        Query the banking documentation
         
         Args:
             query_text: The search query
             top_k: Number of results to return
-            filters: Metadata filters (e.g., {"book_name": "CUBE Project Overview"})
+            filters: Metadata filters (e.g., {"book_name": "Banking Project Overview"})
             include_synthetic: Whether to include synthetic chunks in results
         
         Returns:
@@ -127,7 +128,7 @@ class CUBEQueryEngine:
         query_text: str,
         top_k: int = 5
     ) -> List[Dict]:
-        """Query within specific module (Branch, NPC, Admin, QC, etc.)"""
+        """Query within specific module (Branch, Review, Admin, QC, etc.)"""
         results = self.query(
             query_text=f"{module} {query_text}",
             top_k=top_k * 2
@@ -219,7 +220,7 @@ class CUBEQueryEngine:
     def interactive_query(self):
         """Interactive query interface"""
         print("\n" + "="*80)
-        print("CUBE DOCUMENTATION QUERY INTERFACE")
+        print("BANKING DOCUMENTATION QUERY INTERFACE")
         print("="*80)
         print("\nCommands:")
         print("  - Just type your question naturally")
@@ -272,8 +273,9 @@ class CUBEQueryEngine:
 
 def main():
     # Initialize query engine
-    engine = CUBEQueryEngine(
-        db_path="/Users/newusername/Desktop/RAG_bankingV.2/Banking-knowledgeAssistance/vector_db/cube_optimized_db",
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    engine = BankingQueryEngine(
+        db_path=os.path.join(project_root, "vector_db", "cube_optimized_db"),
         collection_name="cube_docs_optimized"
     )
     
@@ -288,7 +290,7 @@ def main():
             'description': "General NRI account query"
         },
         {
-            'query': "How does the NPC clearance process work?",
+            'query': "How does the document clearance process work?",
             'description': "Process flow query"
         },
         {

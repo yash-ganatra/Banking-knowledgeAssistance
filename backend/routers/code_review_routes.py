@@ -32,9 +32,9 @@ router = APIRouter(prefix="/api/code-review", tags=["code-review"])
 # Initialize Groq client
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not GROQ_API_KEY:
-    GROQ_API_KEY = "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"
+    logger.warning("GROQ_API_KEY not set. Code review features will be disabled.")
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+groq_client = Groq(api_key=GROQ_API_KEY) if GROQ_API_KEY else None
 
 # Initialize security components
 query_guardrails = QueryGuardrails(strict_mode=True)

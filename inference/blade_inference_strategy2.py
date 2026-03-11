@@ -58,8 +58,7 @@ class BladeInferenceSystem:
         # Initialize LLM client
         api_key = groq_api_key or os.getenv("GROQ_API_KEY")
         if not api_key:
-            # Fallback key (for testing only)
-            api_key = "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"
+            raise ValueError("GROQ_API_KEY not set. Please set it in your .env file.")
         
         self.groq_client = Groq(api_key=api_key)
         

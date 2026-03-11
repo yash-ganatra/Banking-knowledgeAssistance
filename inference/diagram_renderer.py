@@ -7,7 +7,7 @@ from typing import Dict, List
 
 
 class MermaidRenderer:
-    """Render Mermaid diagrams from CUBE query results"""
+    """Render Mermaid diagrams from Banking query results"""
     
     @staticmethod
     def extract_diagrams(results: List[Dict]) -> List[Dict]:
@@ -95,7 +95,7 @@ class MermaidRenderer:
 """
     
     @staticmethod
-    def save_html(mermaid_code: str, filename: str, title: str = "CUBE Diagram"):
+    def save_html(mermaid_code: str, filename: str, title: str = "Banking Diagram"):
         """Save diagram as standalone HTML file"""
         html = MermaidRenderer.render_html(mermaid_code, title)
         
@@ -130,11 +130,11 @@ def demo_usage():
     # Example 1: Extract from query results
     print("\n1. Extract diagrams from query results:")
     print("""
-from query_cube_optimized import CUBEQueryEngine
+from query_cube_optimized import BankingQueryEngine
 from diagram_renderer import MermaidRenderer
 
-engine = CUBEQueryEngine()
-results = engine.query("show me the NPC flow", top_k=5)
+engine = BankingQueryEngine()
+results = engine.query("show me the review flow", top_k=5)
 
 # Extract all diagrams
 diagrams = MermaidRenderer.extract_diagrams(results)
@@ -156,7 +156,7 @@ if results[0]['metadata'].get('mermaid_code'):
     MermaidRenderer.save_html(
         mermaid_code, 
         'npc_flow.html',
-        title=f"CUBE - {page_name}"
+        title=f"Banking - {page_name}"
     )
     
     # Opens in default browser
@@ -187,8 +187,8 @@ for diagram in diagrams:
 results = engine.query("all flowcharts", top_k=10)
 diagrams = MermaidRenderer.extract_diagrams(results)
 
-with open('cube_diagrams.md', 'w') as f:
-    f.write("# CUBE Process Diagrams\\n\\n")
+with open('banking_diagrams.md', 'w') as f:
+    f.write("# Banking Process Diagrams\\n\\n")
     
     for diagram in diagrams:
         md = MermaidRenderer.render_markdown(
@@ -218,7 +218,7 @@ def create_diagram_gallery(results):
         </style>
     </head>
     <body>
-        <h1>CUBE Documentation - All Diagrams</h1>
+        <h1>Banking Documentation - All Diagrams</h1>
     ''']
     
     for diagram in diagrams:
@@ -232,13 +232,13 @@ def create_diagram_gallery(results):
     
     html_parts.append('</body></html>')
     
-    with open('cube_diagram_gallery.html', 'w') as f:
+    with open('banking_diagram_gallery.html', 'w') as f:
         f.write(''.join(html_parts))
     
-    print("✓ Created diagram gallery: cube_diagram_gallery.html")
+    print("✓ Created diagram gallery: banking_diagram_gallery.html")
 
 # Use it
-engine = CUBEQueryEngine()
+engine = BankingQueryEngine()
 all_results = engine.query("diagram flow process", top_k=50)
 create_diagram_gallery(all_results)
 """)
