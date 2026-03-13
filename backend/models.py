@@ -229,3 +229,35 @@ class RetrievalDetail(Base):
 
     def __repr__(self):
         return f"<RetrievalDetail(id={self.id}, chunk_id='{self.chunk_id}', stage='{self.stage}')>"
+
+
+# ============================================================
+# LOG ANALYZER MODELS
+# ============================================================
+
+class LogAnalysisJob(Base):
+    """
+    Stores parsed and analyzed log file results.
+    Analysis is generated automatically after parse/upload and
+    persisted so UI can fetch with a simple "view" action.
+    """
+    __tablename__ = "log_analysis_jobs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    file_name = Column(String(255), nullable=True)
+    file_hash = Column(String(64), nullable=False, index=True)
+    status = Column(String(30), nullable=False, default="processing", index=True)  # processing, completed, failed
+
+    total_entries = Column(Integer, nullable=True)
+    unique_errors = Column(Integer, nullable=True)
+
+    # JSON snapshots for quick retrieval by UI
+    parse_result = Column(JSON, nullable=True)
+    analysis_result = Column(JSON, nullable=True)
+    error_message = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    def __repr__(self):
+        return f"<LogAnalysisJob(id={self.id}, file_name='{self.file_name}', status='{self.status}')>"

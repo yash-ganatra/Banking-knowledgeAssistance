@@ -25,6 +25,8 @@ function LogAnalyzer({ isDarkMode }) {
     const [expandedErrors, setExpandedErrors] = useState(new Set());
     const [expandedAnalysis, setExpandedAnalysis] = useState(new Set());
     const [filterText, setFilterText] = useState('');
+    const [analysisJobId, setAnalysisJobId] = useState(null);
+    const [analysisStatus, setAnalysisStatus] = useState(null);
     // Tracks which view to show: 'parse' = error list, 'analysis' = results
     const [activeTab, setActiveTab] = useState('parse');
     const fileInputRef = useRef(null);
@@ -36,6 +38,49 @@ function LogAnalyzer({ isDarkMode }) {
             analysisRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
         }
     }, [analysisResult]);
+
+    const fetchStoredAnalysis = useCallback(async (jobId) => {
+        if (!jobId) return;
+
+        try {
+            const res = await fetch(`${API_BASE}/api/log-analyzer/analysis/${jobId}`);
+            if (!res.ok) {
+                const err = await res.json().catch(() => ({}));
+                throw new Error(err.detail || 'Failed to fetch stored analysis');
+            }
+
+            const data = await res.json();
+            setAnalysisStatus(data.status);
+
+            if (data.status === 'completed') {
+                setAnalysisResult({
+                    analyzed_count: data.analyzed_count || 0,
+                    analyses: data.analyses || [],
+                });
+                setIsAnalyzing(false);
+                if ((data.analyses || []).length > 0) {
+                    setExpandedAnalysis(new Set(data.analyses.map(a => a.fingerprint)));
+                }
+            } else if (data.status === 'failed') {
+                setAnalysisResult({ error: data.error_message || 'Automatic analysis failed' });
+                setIsAnalyzing(false);
+            } else {
+                setIsAnalyzing(true);
+            }
+        } catch (err) {
+            console.error('[LogAnalyzer] Failed to fetch stored analysis:', err);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!analysisJobId || analysisStatus !== 'processing') return;
+
+        const id = setInterval(() => {
+            fetchStoredAnalysis(analysisJobId);
+        }, 3000);
+
+        return () => clearInterval(id);
+    }, [analysisJobId, analysisStatus, fetchStoredAnalysis]);
 
     // ---- Drag & Drop ----
     const handleDragOver = useCallback((e) => {
@@ -76,6 +121,8 @@ function LogAnalyzer({ isDarkMode }) {
         setIsParsing(true);
         setParseResult(null);
         setAnalysisResult(null);
+        setAnalysisJobId(null);
+        setAnalysisStatus(null);
         setActiveTab('parse');
 
         try {
@@ -95,6 +142,16 @@ function LogAnalyzer({ isDarkMode }) {
             const data = await res.json();
             setParseResult(data);
             setSelectedErrors(new Set(data.errors.map(e => e.fingerprint)));
+
+            if (data.analysis_job_id) {
+                setAnalysisJobId(data.analysis_job_id);
+                setAnalysisStatus(data.analysis_status || 'processing');
+                if (data.analysis_status === 'completed') {
+                    await fetchStoredAnalysis(data.analysis_job_id);
+                } else {
+                    setIsAnalyzing(true);
+                }
+            }
         } catch (err) {
             console.error('Parse error:', err);
             setParseResult({ error: err.message });
@@ -103,53 +160,10 @@ function LogAnalyzer({ isDarkMode }) {
         }
     };
 
-    // ---- Analyze (full LLM) ----
-    const handleAnalyze = async () => {
-        if (!file || selectedErrors.size === 0) return;
-        setIsAnalyzing(true);
-        setAnalysisResult(null);
-        // Switch to analysis tab immediately so user sees progress
+    const handleViewAnalysis = async () => {
+        if (!analysisJobId) return;
         setActiveTab('analysis');
-
-        const selectedList = Array.from(selectedErrors);
-        console.log('[LogAnalyzer] Starting analysis for', selectedList.length, 'errors:', selectedList);
-
-        try {
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('selected_errors', selectedList.join(','));
-            formData.append('top_k_context', '5');
-
-            const res = await fetch(`${API_BASE}/api/log-analyzer/analyze`, {
-                method: 'POST',
-                body: formData,
-            });
-
-            console.log('[LogAnalyzer] Response status:', res.status);
-
-            if (!res.ok) {
-                const err = await res.json().catch(() => ({}));
-                console.error('[LogAnalyzer] Error response:', err);
-                throw new Error(err.detail || 'Failed to analyze log file');
-            }
-
-            const data = await res.json();
-            console.log('[LogAnalyzer] Analysis complete:', {
-                analyzed_count: data.analyzed_count,
-                analyses_length: data.analyses?.length,
-                first_rca_len: data.analyses?.[0]?.root_cause_analysis?.length || 0,
-            });
-
-            setAnalysisResult(data);
-            if (data.analyses?.length > 0) {
-                setExpandedAnalysis(new Set(data.analyses.map(a => a.fingerprint)));
-            }
-        } catch (err) {
-            console.error('[LogAnalyzer] Analysis error:', err);
-            setAnalysisResult({ error: err.message });
-        } finally {
-            setIsAnalyzing(false);
-        }
+        await fetchStoredAnalysis(analysisJobId);
     };
 
     // ---- Helpers ----
@@ -207,6 +221,9 @@ function LogAnalyzer({ isDarkMode }) {
         setFile(null);
         setParseResult(null);
         setAnalysisResult(null);
+        setAnalysisJobId(null);
+        setAnalysisStatus(null);
+        setIsAnalyzing(false);
         setSelectedErrors(new Set());
         setExpandedErrors(new Set());
         setExpandedAnalysis(new Set());
@@ -235,7 +252,7 @@ function LogAnalyzer({ isDarkMode }) {
                             Log Analyzer
                         </h2>
                         <p className={cn("text-xs font-medium mt-0.5", isDarkMode ? "text-gray-500" : "text-gray-500")}>
-                            Upload a server log file to identify, deduplicate, and analyze errors using codebase context.
+                            Upload a server log file to identify and auto-analyze errors. Results are stored and can be viewed anytime.
                         </p>
                     </div>
                 </div>
@@ -273,7 +290,7 @@ function LogAnalyzer({ isDarkMode }) {
                                 <div>
                                     <p className={cn("text-base font-medium", isDarkMode ? "text-gray-200" : "text-gray-900")}>{file.name}</p>
                                     <p className={cn("text-xs mt-1", isDarkMode ? "text-gray-500" : "text-gray-500")}>
-                                        {(file.size / 1024).toFixed(1)} KB • Ready to parse
+                                        {(file.size / 1024).toFixed(1)} KB • Ready to parse and auto-analyze
                                     </p>
                                 </div>
                                 <button
@@ -289,7 +306,7 @@ function LogAnalyzer({ isDarkMode }) {
                                     {isParsing ? (
                                         <><Loader2 size={18} className="animate-spin" /> Parsing...</>
                                     ) : (
-                                        <><Search size={18} /> Parse & Preview Errors</>
+                                        <><Search size={18} /> Parse & Start Analysis</>
                                     )}
                                 </button>
                             </div>
@@ -350,8 +367,8 @@ function LogAnalyzer({ isDarkMode }) {
                                     Reset
                                 </button>
                                 <button
-                                    onClick={handleAnalyze}
-                                    disabled={isAnalyzing || selectedErrors.size === 0}
+                                    onClick={handleViewAnalysis}
+                                    disabled={!analysisJobId}
                                     className={cn(
                                         "px-5 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed",
                                         isDarkMode
@@ -359,11 +376,7 @@ function LogAnalyzer({ isDarkMode }) {
                                             : "bg-[#111827] text-white hover:bg-black focus:ring-gray-900"
                                     )}
                                 >
-                                    {isAnalyzing ? (
-                                        <><Loader2 size={16} className="animate-spin" /> Analyzing...</>
-                                    ) : (
-                                        <><AlertTriangle size={16} /> Analyze {selectedErrors.size} Error{selectedErrors.size !== 1 ? 's' : ''}</>
-                                    )}
+                                    <><AlertTriangle size={16} /> View Analysis</>
                                 </button>
                             </div>
                         </div>
@@ -568,7 +581,7 @@ function LogAnalyzer({ isDarkMode }) {
                                         <div className="text-center">
                                             <p className={cn("text-sm font-semibold", isDarkMode ? "text-gray-200" : "text-gray-800")}>Analyzing errors...</p>
                                             <p className={cn("text-xs mt-1", isDarkMode ? "text-gray-500" : "text-gray-500")}>
-                                                Retrieving vector context and generating root cause
+                                                Automatic analysis is running and being saved
                                             </p>
                                         </div>
                                     </div>
