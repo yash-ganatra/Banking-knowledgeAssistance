@@ -112,8 +112,7 @@ class SmartQueryResponse(BaseModel):
     context_used: Optional[str] = None
     routing_decision: Dict[str, Any]  # Intent classification details
     sources_queried: List[str]  # Which DBs were actually queried
-    llm_response: Optional[str] = None
-    context_used: Optional[str] = None
+    crag_metadata: Optional[Dict[str, Any]] = None  # CRAG evaluation details
 
 # --- Engines ---
 
@@ -355,7 +354,7 @@ def startup_event():
         llm_service = LLMService(GROQ_API_KEY)
         logger.info("LLM Service Ready")
     
-    # Initialize Unified Query Engine (Smart Router)
+    # Initialize Unified Query Engine (Smart Router) with CRAG
     try:
         if all([business_engine, php_engine, js_engine, blade_engine, llm_service, GROQ_API_KEY]):
             intent_classifier = IntentClassifier(groq_api_key=GROQ_API_KEY, model="llama-3.1-8b-instant")
@@ -374,12 +373,33 @@ def startup_event():
                 neo4j_uri=os.getenv("NEO4J_URI", "bolt://localhost:7687"),
                 groq_api_key=GROQ_API_KEY
             )
+            
+            # Initialize CRAG components
+            from utils.retrieval_evaluator import RetrievalEvaluator
+            from utils.knowledge_refiner import KnowledgeRefiner
+            
+            retrieval_evaluator = RetrievalEvaluator(
+                groq_api_key=GROQ_API_KEY,
+                model="llama-3.1-8b-instant",
+            )
+            
+            # Reuse the cross-encoder from QueryRouter's ResultFusion
+            cross_encoder = query_router.result_fusion.cross_encoder if hasattr(query_router, 'result_fusion') else None
+            knowledge_refiner = KnowledgeRefiner(
+                cross_encoder=cross_encoder,
+                sentence_threshold=0.0,
+                max_sentences_per_chunk=10,
+                min_sentences_per_chunk=2,
+            )
+            
             unified_query_engine = UnifiedQueryEngine(
                 intent_classifier=intent_classifier,
                 query_router=query_router,
-                llm_service=llm_service
+                llm_service=llm_service,
+                retrieval_evaluator=retrieval_evaluator,
+                knowledge_refiner=knowledge_refiner,
             )
-            logger.info("✅ Unified Query Engine (Smart Router) Ready")
+            logger.info("✅ Unified Query Engine (Smart Router) with CRAG Ready")
             
             # Log hybrid search status
             if query_router.use_hybrid_search:
@@ -544,7 +564,8 @@ async def inference_smart(request: SmartQueryRequest, db: Session = Depends(data
             llm_response=result['llm_response'],
             context_used=result['context'],
             routing_decision=result['routing_decision'],
-            sources_queried=result['sources_queried']
+            sources_queried=result['sources_queried'],
+            crag_metadata=result.get('crag_metadata', None)
         )
         
     except Exception as e:

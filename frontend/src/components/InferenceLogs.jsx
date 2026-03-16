@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Database, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight,
-  Activity, Zap, Filter, RefreshCw, Trash2, Eye, BarChart2
+  Activity, Zap, Filter, RefreshCw, Trash2, Eye, BarChart2, Code
 } from 'lucide-react';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -596,6 +596,208 @@ const ChunkCard = ({ chunk, type }) => {
   );
 };
 
+// ============================================================================
+// CRAG Flow Visualization Component
+// ============================================================================
+
+const CRAGFlowDiagram = ({ crag, chunksBefore, chunksAfter, query }) => {
+  if (!crag) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        <Zap className="w-12 h-12 mx-auto mb-3 opacity-20" />
+        <p>No CRAG metadata available for this request.</p>
+        <p className="text-sm mt-1">This query may have been processed before CRAG was enabled.</p>
+      </div>
+    );
+  }
+
+  const isCorrect = crag.verdict === 'CORRECT';
+  const isAmbiguous = crag.verdict === 'AMBIGUOUS';
+  const isIncorrect = crag.verdict === 'INCORRECT';
+
+  const verdictColorClass = isCorrect
+    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+    : isAmbiguous
+      ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+      : 'text-red-400 bg-red-500/10 border-red-500/30';
+
+  const NodeLine = ({ active = false, color = 'bg-gray-700' }) => (
+    <div className="flex justify-center my-1 relative h-6">
+      <div className={`w-0.5 h-full ${active ? color : 'bg-gray-700'} ${active && color.includes('orange') ? 'shadow-[0_0_8px_rgba(249,115,22,0.6)]' : ''}`}></div>
+      {active && color.includes('orange') && (
+        <div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-orange-500 animate-ping opacity-75"></div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="max-w-3xl mx-auto py-4">
+      <div className="mb-6 flex items-center justify-between bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+        <div>
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <Zap className="w-5 h-5 text-blue-400" />
+            Corrective RAG (CRAG) Lifecycle
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Self-correction and knowledge refinement flow</p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-gray-500">Evaluation Latency</div>
+          <div className="text-sm font-mono text-gray-300">
+            {crag.evaluation_time_ms ? `${crag.evaluation_time_ms.toFixed(0)}ms` : 'N/A'}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-0">
+        {/* Node 1: Initial Retrieval */}
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-sm relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-semibold text-gray-200">Retrieval Complete</div>
+              <div className="text-sm text-gray-400">
+                Retrieved <span className="text-white font-medium">{chunksBefore || 0}</span> contextual chunks from databases
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <NodeLine active={true} color="bg-blue-500/50" />
+
+        {/* Node 2: Evaluator */}
+        <div className={`bg-gray-800 border rounded-xl p-4 shadow-md relative z-10 ${verdictColorClass.replace('bg-', 'border-').replace('/10', '/50')}`}>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${verdictColorClass}`}>
+                <Activity className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="font-semibold text-gray-200 flex items-center gap-2">
+                  Retrieval Evaluator (LLM)
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${verdictColorClass}`}>
+                    {crag.verdict || 'UNKNOWN'}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-400 mt-1 flex gap-4">
+                  <span>Confidence: <span className="text-white font-medium">{crag.confidence ? `${(crag.confidence * 100).toFixed(0)}%` : 'N/A'}</span></span>
+                  <div className="flex gap-2 text-xs items-center bg-gray-900/50 px-2 rounded">
+                    <span className="text-emerald-400" title="Correct">{crag.correct_count || 0}C</span>
+                    <span className="text-gray-600">|</span>
+                    <span className="text-amber-400" title="Ambiguous">{crag.ambiguous_count || 0}A</span>
+                    <span className="text-gray-600">|</span>
+                    <span className="text-red-400" title="Incorrect">{crag.incorrect_count || 0}I</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <NodeLine active={crag.corrective_action_taken} color={crag.corrective_action_taken ? "bg-orange-500" : "bg-gray-600"} />
+
+        {/* Node 3: Corrective Actions (Optional) */}
+        {crag.corrective_action_taken && (
+          <>
+            <div className="bg-gray-800 border border-orange-500/50 rounded-xl p-4 shadow-md relative z-10 shadow-orange-500/10">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center border border-orange-500/40">
+                  <RefreshCw className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-200 flex items-center justify-between">
+                    <span>Corrective Action Triggered</span>
+                    <span className="text-xs text-orange-400 bg-orange-500/10 px-2 py-1 rounded border border-orange-500/20">
+                      Retry #{crag.retry_count || 1}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-400 mt-1">
+                    Action: <span className="text-white">{crag.corrective_action_type || 'RETRY_WITH_REWRITE'}</span>
+                  </div>
+
+                  {crag.rewritten_query && (
+                    <div className="mt-3">
+                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                        <Code className="w-3 h-3" /> Rewritten Query for Retry
+                      </div>
+                      <div className="text-sm text-orange-200 font-mono bg-orange-950/30 p-2.5 rounded border border-orange-500/20">
+                        {crag.rewritten_query}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <NodeLine active={true} color="bg-orange-500 mt-4" />
+          </>
+        )}
+
+        {/* Node 4: Knowledge Refinement (Optional) */}
+        {crag.refinement_applied && (
+          <>
+            <div className="bg-gray-800 border border-purple-500/40 rounded-xl p-4 shadow-sm relative z-10">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
+                  <Filter className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-200 flex justify-between items-center">
+                    Knowledge Refinement
+                    {crag.refinement_compression && (
+                      <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
+                        Targeted Extraction
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-400 mt-1">
+                    Extracted relevant sentences via Cross-Encoder
+                    <span className="ml-2 text-xs text-gray-500">({crag.refinement_time_ms ? `${crag.refinement_time_ms.toFixed(0)}ms` : 'N/A'})</span>
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-4 text-sm bg-gray-900/50 p-2 rounded-lg border border-gray-700">
+                    <div className="flex-1 text-center">
+                      <div className="text-gray-500 text-xs">Total Sentences</div>
+                      <div className="text-gray-300 font-mono">{crag.sentences_before || 0}</div>
+                    </div>
+                    <div className="text-purple-400 flex items-center">
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 text-center">
+                      <div className="text-purple-400 text-xs font-semibold">Kept Relevant</div>
+                      <div className="text-purple-300 font-bold font-mono">{crag.sentences_after || 0}</div>
+                    </div>
+                    <div className="flex-1 text-center border-l border-gray-700 pl-4">
+                      <div className="text-gray-500 text-xs">Compression</div>
+                      <div className="text-white font-mono">{crag.refinement_compression ? `${(crag.refinement_compression * 100).toFixed(1)}%` : '0%'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <NodeLine active={true} color="bg-purple-500/50" />
+          </>
+        )}
+
+        {/* Node 5: Final Context */}
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-sm relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-semibold text-gray-200">Context Prepared</div>
+              <div className="text-sm text-gray-400">
+                Finalized <span className="text-white font-medium">{chunksAfter || 0}</span> chunks for LLM generation
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // Detail modal for viewing full pipeline
 const DetailModal = ({ logId, onClose }) => {
   const [pipelineData, setPipelineData] = useState(null);
@@ -661,22 +863,32 @@ const DetailModal = ({ logId, onClose }) => {
               </div>
 
               {/* Tabs */}
-              <div className="flex gap-2 border-b border-gray-700 pb-3">
-                {['pipeline', 'before', 'after', 'comparison'].map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === tab
-                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                      : 'text-gray-400 hover:text-white hover:bg-gray-700'
-                      }`}
-                  >
-                    {tab === 'pipeline' ? 'Pipeline' :
-                      tab === 'before' ? `Before Rerank (${pipelineData.rerank_summary?.before_count || 0})` :
-                        tab === 'after' ? `After Rerank (${pipelineData.rerank_summary?.after_count || 0})` :
-                          'Comparison'}
-                  </button>
-                ))}
+              <div className="flex gap-2 border-b border-gray-700 pb-3 overflow-x-auto no-scrollbar">
+                {['pipeline', 'crag', 'before', 'after', 'comparison'].map(tab => {
+                  let badge = null;
+                  if (tab === 'crag' && pipelineData.crag?.verdict) {
+                    const v = pipelineData.crag.verdict;
+                    const c = v === 'CORRECT' ? 'bg-emerald-500/20 text-emerald-400' : v === 'INCORRECT' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400';
+                    badge = <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${c}`}>{v[0]}</span>;
+                  }
+
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center ${activeTab === tab
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                        }`}
+                    >
+                      {tab === 'pipeline' ? 'Pipeline' :
+                        tab === 'crag' ? <span className="flex items-center gap-1.5"><Zap className="w-4 h-4" /> CRAG Flow{badge}</span> :
+                          tab === 'before' ? `Before Rerank (${pipelineData.rerank_summary?.before_count || 0})` :
+                            tab === 'after' ? `After Rerank (${pipelineData.rerank_summary?.after_count || 0})` :
+                              'Comparison'}
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Rerank Summary Banner */}
@@ -707,6 +919,13 @@ const DetailModal = ({ logId, onClose }) => {
                     ))}
                   </div>
                 </div>
+              ) : activeTab === 'crag' ? (
+                <CRAGFlowDiagram
+                  crag={pipelineData.crag}
+                  query={pipelineData.query}
+                  chunksBefore={pipelineData.rerank_summary?.before_count}
+                  chunksAfter={pipelineData.rerank_summary?.after_count}
+                />
               ) : activeTab === 'before' ? (
                 <div>
                   <div className="text-gray-400 text-sm mb-4">

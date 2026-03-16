@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { 
-  Database, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight, 
+import {
+  Database, Clock, CheckCircle, XCircle, ChevronDown, ChevronRight,
   Activity, Zap, Filter, RefreshCw, Trash2, Eye, BarChart2, Search,
   ArrowLeft, X, ExternalLink, FileCode, Code, FileText, Layout
 } from 'lucide-react';
@@ -18,10 +18,10 @@ const SourceBadge = ({ source }) => {
     blade_templates: { bg: 'bg-green-500/20', text: 'text-green-300', border: 'border-green-500/30', icon: Layout },
     business_docs: { bg: 'bg-blue-500/20', text: 'text-blue-300', border: 'border-blue-500/30', icon: FileText },
   };
-  
+
   const c = config[source] || { bg: 'bg-gray-500/20', text: 'text-gray-300', border: 'border-gray-500/30', icon: Database };
   const Icon = c.icon;
-  
+
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${c.bg} ${c.text} ${c.border}`}>
       <Icon className="w-3 h-3" />
@@ -38,7 +38,7 @@ const StatCard = ({ icon: Icon, label, value, subtext, color = 'blue' }) => {
     yellow: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     purple: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
   };
-  
+
   return (
     <div className={`rounded-xl border p-5 ${colorClasses[color]} backdrop-blur-sm`}>
       <div className="flex items-center gap-2 mb-3">
@@ -75,10 +75,10 @@ const PipelineStage = ({ stage, isLast, isExpanded, onToggle }) => {
   };
 
   const config = getStageConfig(stage.stage);
-  
+
   return (
     <div className="relative">
-      <div 
+      <div
         className="flex items-start cursor-pointer group"
         onClick={onToggle}
       >
@@ -97,14 +97,14 @@ const PipelineStage = ({ stage, isLast, isExpanded, onToggle }) => {
               </span>
             )}
           </div>
-          
+
           {/* Stage-specific content */}
           {stage.sources && stage.sources.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-2">
               {stage.sources.map(src => <SourceBadge key={src} source={src} />)}
             </div>
           )}
-          
+
           {stage.total_chunks !== undefined && (
             <div className="mt-2 text-sm text-gray-400">
               <span className="text-gray-300 font-medium">{stage.total_chunks}</span> chunks retrieved
@@ -116,7 +116,7 @@ const PipelineStage = ({ stage, isLast, isExpanded, onToggle }) => {
               )}
             </div>
           )}
-          
+
           {stage.chunks_before !== undefined && (
             <div className="mt-2 text-sm">
               <span className="text-gray-400">Filtered: </span>
@@ -126,7 +126,7 @@ const PipelineStage = ({ stage, isLast, isExpanded, onToggle }) => {
               <span className="text-gray-500 ml-1">chunks</span>
             </div>
           )}
-          
+
           {stage.output?.primary_source && (
             <div className="mt-2 p-3 bg-gray-800/50 rounded-lg text-sm">
               <div className="flex items-center gap-2 mb-1">
@@ -155,30 +155,30 @@ const PipelineStage = ({ stage, isLast, isExpanded, onToggle }) => {
 
 const ChunkCard = ({ chunk, index, showStage }) => {
   const [expanded, setExpanded] = useState(false);
-  
+
   // Determine rank and styling based on stage
   const isBefore = showStage === 'before';
   const isAfter = showStage === 'after';
   const displayRank = isBefore ? (chunk.rrf_rank || index + 1) : (chunk.final_rank || index + 1);
-  const rankColorClass = isBefore 
-    ? 'bg-amber-500/20 text-amber-400' 
-    : isAfter 
-      ? 'bg-emerald-500/20 text-emerald-400' 
+  const rankColorClass = isBefore
+    ? 'bg-amber-500/20 text-amber-400'
+    : isAfter
+      ? 'bg-emerald-500/20 text-emerald-400'
       : 'bg-blue-500/20 text-blue-400';
-  const borderColorClass = isBefore 
-    ? 'border-amber-500/30' 
-    : isAfter 
-      ? 'border-emerald-500/30' 
+  const borderColorClass = isBefore
+    ? 'border-amber-500/30'
+    : isAfter
+      ? 'border-emerald-500/30'
       : 'border-gray-700/50';
-  
+
   // Get display name - prefer file_path, then file_name, then chunk_id
-  const displayName = chunk.file_path 
-    ? chunk.file_path.split(/[\\\/]/).pop() 
+  const displayName = chunk.file_path
+    ? chunk.file_path.split(/[\\\/]/).pop()
     : (chunk.file_name || chunk.chunk_id?.replace('_before', '') || 'Unknown');
-  
+
   return (
     <div className={`bg-gray-800/60 rounded-lg border ${borderColorClass} overflow-hidden`}>
-      <div 
+      <div
         className="p-3 cursor-pointer hover:bg-gray-700/30 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
@@ -206,14 +206,14 @@ const ChunkCard = ({ chunk, index, showStage }) => {
             {expanded ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
           </div>
         </div>
-        
+
         {chunk.class_name && (
           <div className="mt-1 text-xs text-gray-500 ml-8">
             {chunk.class_name}{chunk.method_name && ` → ${chunk.method_name}`}
           </div>
         )}
       </div>
-      
+
       {expanded && (
         <div className="border-t border-gray-700/50 p-3 bg-gray-900/50">
           {/* File path if available */}
@@ -222,13 +222,13 @@ const ChunkCard = ({ chunk, index, showStage }) => {
               📁 {chunk.file_path}
             </div>
           )}
-          
+
           {chunk.content_preview && (
             <pre className="text-xs text-gray-300 font-mono bg-gray-800 p-3 rounded overflow-x-auto mb-3 whitespace-pre-wrap max-h-48 overflow-y-auto">
               {chunk.content_preview}
             </pre>
           )}
-          
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
             {chunk.rrf_rank && (
               <div className="bg-amber-500/10 border border-amber-500/20 p-2 rounded">
@@ -284,19 +284,18 @@ const ChunkCardCompact = ({ chunk, type }) => {
   const isAfter = type === 'after';
   const borderColor = isAfter ? 'border-emerald-500/30' : 'border-amber-500/30';
   const bgColor = isAfter ? 'bg-emerald-500/5' : 'bg-amber-500/5';
-  
+
   // Get display name 
-  const displayName = chunk.file_path 
-    ? chunk.file_path.split(/[\\\/]/).pop() 
+  const displayName = chunk.file_path
+    ? chunk.file_path.split(/[\\\/]/).pop()
     : (chunk.file_name || chunk.chunk_id?.replace('_before', '') || 'Unknown');
-  
+
   return (
     <div className={`rounded-lg border ${borderColor} ${bgColor} p-3 text-sm`}>
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">
-          <span className={`flex-shrink-0 w-5 h-5 rounded text-xs font-bold flex items-center justify-center ${
-            isAfter ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
-          }`}>
+          <span className={`flex-shrink-0 w-5 h-5 rounded text-xs font-bold flex items-center justify-center ${isAfter ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+            }`}>
             {isAfter ? chunk.final_rank : chunk.rrf_rank || '?'}
           </span>
           <SourceBadge source={chunk.source} />
@@ -332,6 +331,208 @@ const ChunkCardCompact = ({ chunk, type }) => {
 };
 
 // ============================================================================
+// CRAG Flow Visualization Component
+// ============================================================================
+
+const CRAGFlowDiagram = ({ crag, chunksBefore, chunksAfter, query }) => {
+  if (!crag) {
+    return (
+      <div className="text-center py-12 text-gray-500">
+        <Zap className="w-12 h-12 mx-auto mb-3 opacity-20" />
+        <p>No CRAG metadata available for this request.</p>
+        <p className="text-sm mt-1">This query may have been processed before CRAG was enabled.</p>
+      </div>
+    );
+  }
+
+  const isCorrect = crag.verdict === 'CORRECT';
+  const isAmbiguous = crag.verdict === 'AMBIGUOUS';
+  const isIncorrect = crag.verdict === 'INCORRECT';
+
+  const verdictColorClass = isCorrect
+    ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
+    : isAmbiguous
+      ? 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+      : 'text-red-400 bg-red-500/10 border-red-500/30';
+
+  const NodeLine = ({ active = false, color = 'bg-gray-700' }) => (
+    <div className="flex justify-center my-1 relative h-6">
+      <div className={`w-0.5 h-full ${active ? color : 'bg-gray-700'} ${active && color.includes('orange') ? 'shadow-[0_0_8px_rgba(249,115,22,0.6)]' : ''}`}></div>
+      {active && color.includes('orange') && (
+        <div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 rounded-full bg-orange-500 animate-ping opacity-75"></div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="max-w-3xl mx-auto py-4">
+      <div className="mb-6 flex items-center justify-between bg-gray-800/50 p-4 rounded-xl border border-gray-700">
+        <div>
+          <h3 className="text-lg font-bold text-white flex items-center gap-2">
+            <Zap className="w-5 h-5 text-blue-400" />
+            Corrective RAG (CRAG) Lifecycle
+          </h3>
+          <p className="text-sm text-gray-400 mt-1">Self-correction and knowledge refinement flow</p>
+        </div>
+        <div className="text-right">
+          <div className="text-xs text-gray-500">Evaluation Latency</div>
+          <div className="text-sm font-mono text-gray-300">
+            {crag.evaluation_time_ms ? `${crag.evaluation_time_ms.toFixed(0)}ms` : 'N/A'}
+          </div>
+        </div>
+      </div>
+
+      <div className="space-y-0">
+        {/* Node 1: Initial Retrieval */}
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-sm relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center border border-blue-500/30">
+              <Database className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-semibold text-gray-200">Retrieval Complete</div>
+              <div className="text-sm text-gray-400">
+                Retrieved <span className="text-white font-medium">{chunksBefore || 0}</span> contextual chunks from databases
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <NodeLine active={true} color="bg-blue-500/50" />
+
+        {/* Node 2: Evaluator */}
+        <div className={`bg-gray-800 border rounded-xl p-4 shadow-md relative z-10 ${verdictColorClass.replace('bg-', 'border-').replace('/10', '/50')}`}>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${verdictColorClass}`}>
+                <Activity className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="font-semibold text-gray-200 flex items-center gap-2">
+                  Retrieval Evaluator (LLM)
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold tracking-wider uppercase ${verdictColorClass}`}>
+                    {crag.verdict || 'UNKNOWN'}
+                  </span>
+                </div>
+                <div className="text-sm text-gray-400 mt-1 flex gap-4">
+                  <span>Confidence: <span className="text-white font-medium">{crag.confidence ? `${(crag.confidence * 100).toFixed(0)}%` : 'N/A'}</span></span>
+                  <div className="flex gap-2 text-xs items-center bg-gray-900/50 px-2 rounded">
+                    <span className="text-emerald-400" title="Correct">{crag.correct_count || 0}C</span>
+                    <span className="text-gray-600">|</span>
+                    <span className="text-amber-400" title="Ambiguous">{crag.ambiguous_count || 0}A</span>
+                    <span className="text-gray-600">|</span>
+                    <span className="text-red-400" title="Incorrect">{crag.incorrect_count || 0}I</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <NodeLine active={crag.corrective_action_taken} color={crag.corrective_action_taken ? "bg-orange-500" : "bg-gray-600"} />
+
+        {/* Node 3: Corrective Actions (Optional) */}
+        {crag.corrective_action_taken && (
+          <>
+            <div className="bg-gray-800 border border-orange-500/50 rounded-xl p-4 shadow-md relative z-10 shadow-orange-500/10">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-orange-500/20 text-orange-400 flex items-center justify-center border border-orange-500/40">
+                  <RefreshCw className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-200 flex items-center justify-between">
+                    <span>Corrective Action Triggered</span>
+                    <span className="text-xs text-orange-400 bg-orange-500/10 px-2 py-1 rounded border border-orange-500/20">
+                      Retry #{crag.retry_count || 1}
+                    </span>
+                  </div>
+                  <div className="text-sm text-gray-400 mt-1">
+                    Action: <span className="text-white">{crag.corrective_action_type || 'RETRY_WITH_REWRITE'}</span>
+                  </div>
+
+                  {crag.rewritten_query && (
+                    <div className="mt-3">
+                      <div className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                        <Code className="w-3 h-3" /> Rewritten Query for Retry
+                      </div>
+                      <div className="text-sm text-orange-200 font-mono bg-orange-950/30 p-2.5 rounded border border-orange-500/20">
+                        {crag.rewritten_query}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <NodeLine active={true} color="bg-orange-500 mt-4" />
+          </>
+        )}
+
+        {/* Node 4: Knowledge Refinement (Optional) */}
+        {crag.refinement_applied && (
+          <>
+            <div className="bg-gray-800 border border-purple-500/40 rounded-xl p-4 shadow-sm relative z-10">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
+                  <Filter className="w-5 h-5" />
+                </div>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-200 flex justify-between items-center">
+                    Knowledge Refinement
+                    {crag.refinement_compression && (
+                      <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded border border-purple-500/30">
+                        Targeted Extraction
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-400 mt-1">
+                    Extracted relevant sentences via Cross-Encoder
+                    <span className="ml-2 text-xs text-gray-500">({crag.refinement_time_ms ? `${crag.refinement_time_ms.toFixed(0)}ms` : 'N/A'})</span>
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-4 text-sm bg-gray-900/50 p-2 rounded-lg border border-gray-700">
+                    <div className="flex-1 text-center">
+                      <div className="text-gray-500 text-xs">Total Sentences</div>
+                      <div className="text-gray-300 font-mono">{crag.sentences_before || 0}</div>
+                    </div>
+                    <div className="text-purple-400 flex items-center">
+                      <ChevronRight className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 text-center">
+                      <div className="text-purple-400 text-xs font-semibold">Kept Relevant</div>
+                      <div className="text-purple-300 font-bold font-mono">{crag.sentences_after || 0}</div>
+                    </div>
+                    <div className="flex-1 text-center border-l border-gray-700 pl-4">
+                      <div className="text-gray-500 text-xs">Compression</div>
+                      <div className="text-white font-mono">{crag.refinement_compression ? `${(crag.refinement_compression * 100).toFixed(1)}%` : '0%'}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <NodeLine active={true} color="bg-purple-500/50" />
+          </>
+        )}
+
+        {/* Node 5: Final Context */}
+        <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 shadow-sm relative z-10">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
+              <CheckCircle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="font-semibold text-gray-200">Context Prepared</div>
+              <div className="text-sm text-gray-400">
+                Finalized <span className="text-white font-medium">{chunksAfter || 0}</span> chunks for LLM generation
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ============================================================================
 // Log Detail Modal
 // ============================================================================
 
@@ -339,7 +540,7 @@ const LogDetailModal = ({ logId, onClose }) => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pipeline');
-  
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -355,7 +556,7 @@ const LogDetailModal = ({ logId, onClose }) => {
     };
     fetchData();
   }, [logId]);
-  
+
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <div className="bg-gray-900 rounded-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-gray-700/50 shadow-2xl">
@@ -370,14 +571,14 @@ const LogDetailModal = ({ logId, onClose }) => {
               <p className="text-sm text-gray-400">Log #{logId}</p>
             </div>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-400 hover:text-white"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
-        
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto">
           {loading ? (
@@ -410,33 +611,42 @@ const LogDetailModal = ({ logId, onClose }) => {
                   )}
                 </div>
               </div>
-              
+
               {/* Tabs */}
-              <div className="flex gap-2 mb-6 border-b border-gray-700/50 pb-3">
-                {['pipeline', 'before', 'after', 'comparison'].map(tab => (
-                  <button
-                    key={tab}
-                    onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      activeTab === tab 
-                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
-                        : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                    }`}
-                  >
-                    {tab === 'pipeline' ? 'Pipeline' : 
-                     tab === 'before' ? `Before Rerank (${data.rerank_summary?.before_count || 0})` :
-                     tab === 'after' ? `After Rerank (${data.rerank_summary?.after_count || 0})` :
-                     'Comparison'}
-                  </button>
-                ))}
+              <div className="flex gap-2 mb-6 border-b border-gray-700/50 pb-3 overflow-x-auto no-scrollbar">
+                {['pipeline', 'crag', 'before', 'after', 'comparison'].map(tab => {
+                  let badge = null;
+                  if (tab === 'crag' && data.crag?.verdict) {
+                    const v = data.crag.verdict;
+                    const c = v === 'CORRECT' ? 'bg-emerald-500/20 text-emerald-400' : v === 'INCORRECT' ? 'bg-red-500/20 text-red-400' : 'bg-amber-500/20 text-amber-400';
+                    badge = <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${c}`}>{v[0]}</span>;
+                  }
+
+                  return (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveTab(tab)}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap flex items-center ${activeTab === tab
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-800'
+                        }`}
+                    >
+                      {tab === 'pipeline' ? 'Pipeline' :
+                        tab === 'crag' ? <span className="flex items-center gap-1.5"><Zap className="w-4 h-4" /> CRAG Flow{badge}</span> :
+                          tab === 'before' ? `Before Rerank (${data.rerank_summary?.before_count || 0})` :
+                            tab === 'after' ? `After Rerank (${data.rerank_summary?.after_count || 0})` :
+                              'Comparison'}
+                    </button>
+                  );
+                })}
               </div>
-              
+
               {/* Rerank Summary */}
               {data.rerank_summary && (
                 <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg flex items-center gap-4 text-sm">
                   <Zap className="w-5 h-5 text-amber-400" />
                   <span className="text-amber-300">
-                    Cross-encoder filtered <span className="font-bold">{data.rerank_summary.before_count}</span> chunks 
+                    Cross-encoder filtered <span className="font-bold">{data.rerank_summary.before_count}</span> chunks
                     down to <span className="font-bold text-emerald-400">{data.rerank_summary.after_count}</span>
                     {data.rerank_summary.filtered_out > 0 && (
                       <span className="text-red-400"> ({data.rerank_summary.filtered_out} removed)</span>
@@ -444,18 +654,25 @@ const LogDetailModal = ({ logId, onClose }) => {
                   </span>
                 </div>
               )}
-              
+
               {/* Tab Content */}
               {activeTab === 'pipeline' ? (
                 <div className="space-y-1">
                   {data.stages?.map((stage, idx) => (
-                    <PipelineStage 
-                      key={idx} 
-                      stage={stage} 
+                    <PipelineStage
+                      key={idx}
+                      stage={stage}
                       isLast={idx === data.stages.length - 1}
                     />
                   ))}
                 </div>
+              ) : activeTab === 'crag' ? (
+                <CRAGFlowDiagram
+                  crag={data.crag}
+                  query={data.query}
+                  chunksBefore={data.rerank_summary?.before_count}
+                  chunksAfter={data.rerank_summary?.after_count}
+                />
               ) : activeTab === 'before' ? (
                 <div className="space-y-3">
                   <div className="text-gray-400 text-sm mb-4">
@@ -498,7 +715,7 @@ const LogDetailModal = ({ logId, onClose }) => {
                       ))}
                     </div>
                   </div>
-                  
+
                   {/* After Column */}
                   <div>
                     <div className="flex items-center gap-2 mb-4 pb-2 border-b border-gray-700">
@@ -533,14 +750,13 @@ const LogDetailModal = ({ logId, onClose }) => {
 
 const LogRow = ({ log, onViewDetails, isSelected }) => {
   const [expanded, setExpanded] = useState(false);
-  
+
   return (
-    <div className={`rounded-xl border transition-all ${
-      isSelected 
-        ? 'border-blue-500/50 bg-blue-500/5' 
+    <div className={`rounded-xl border transition-all ${isSelected
+        ? 'border-blue-500/50 bg-blue-500/5'
         : 'border-gray-700/50 bg-gray-800/30 hover:bg-gray-800/50 hover:border-gray-600/50'
-    }`}>
-      <div 
+      }`}>
+      <div
         className="p-4 cursor-pointer"
         onClick={() => setExpanded(!expanded)}
       >
@@ -571,7 +787,7 @@ const LogRow = ({ log, onViewDetails, isSelected }) => {
               </div>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2 flex-shrink-0">
             <div className="hidden md:flex flex-wrap gap-1.5">
               {log.sources_queried?.slice(0, 2).map(src => (
@@ -596,7 +812,7 @@ const LogRow = ({ log, onViewDetails, isSelected }) => {
           </div>
         </div>
       </div>
-      
+
       {expanded && (
         <div className="border-t border-gray-700/50 p-4 bg-gray-900/30">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm mb-4">
@@ -617,7 +833,7 @@ const LogRow = ({ log, onViewDetails, isSelected }) => {
               <div className="text-gray-200 font-medium">{log.reranking_time_ms?.toFixed(0) || '?'}ms</div>
             </div>
           </div>
-          
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
               <div className="text-gray-500 text-xs mb-1">Primary Source</div>
@@ -638,21 +854,21 @@ const LogRow = ({ log, onViewDetails, isSelected }) => {
               </div>
             </div>
           </div>
-          
+
           {log.routing_reasoning && (
             <div className="mt-4 p-3 bg-gray-800/50 rounded-lg">
               <div className="text-gray-500 text-xs mb-1">Routing Reasoning</div>
               <div className="text-gray-300 text-sm italic">"{log.routing_reasoning}"</div>
             </div>
           )}
-          
+
           {log.error_message && (
             <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
               <div className="text-red-400 text-xs mb-1">Error Message</div>
               <div className="text-red-300 text-sm">{log.error_message}</div>
             </div>
           )}
-          
+
           {/* Mobile source badges */}
           <div className="md:hidden flex flex-wrap gap-1.5 mt-4">
             {log.sources_queried?.map(src => (
@@ -680,7 +896,7 @@ export default function InferenceLogsPage() {
     successOnly: null,
     source: '',
   });
-  
+
   const fetchLogs = async () => {
     setLoading(true);
     try {
@@ -689,12 +905,12 @@ export default function InferenceLogsPage() {
       if (filters.successOnly !== null) params.append('success_only', filters.successOnly);
       if (filters.source) params.append('source', filters.source);
       params.append('limit', '100');
-      
+
       const [logsRes, summaryRes] = await Promise.all([
         fetch(`${API_BASE_URL}/inference-logs/?${params}`),
         fetch(`${API_BASE_URL}/inference-logs/summary?hours_ago=${filters.hoursAgo || 24}`)
       ]);
-      
+
       if (logsRes.ok) setLogs(await logsRes.json());
       if (summaryRes.ok) setSummary(await summaryRes.json());
     } catch (error) {
@@ -703,16 +919,16 @@ export default function InferenceLogsPage() {
       setLoading(false);
     }
   };
-  
+
   useEffect(() => {
     fetchLogs();
   }, [filters]);
-  
+
   // Filter logs by search query
-  const filteredLogs = logs.filter(log => 
+  const filteredLogs = logs.filter(log =>
     !searchQuery || log.query?.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  
+
   return (
     <div className="min-h-screen h-auto bg-gradient-to-br from-slate-950 via-gray-900 to-slate-950 pb-8">
       {/* Header */}
@@ -730,9 +946,9 @@ export default function InferenceLogsPage() {
                 </div>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-3">
-              <button 
+              <button
                 onClick={fetchLogs}
                 disabled={loading}
                 className="flex items-center gap-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded-lg text-gray-300 text-sm font-medium transition-colors disabled:opacity-50"
@@ -744,33 +960,33 @@ export default function InferenceLogsPage() {
           </div>
         </div>
       </header>
-      
+
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Summary Cards */}
         {summary && (
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <StatCard 
+            <StatCard
               icon={BarChart2}
               label="Total Queries"
               value={summary.total_queries}
               subtext={`Last ${filters.hoursAgo || 24} hours`}
               color="blue"
             />
-            <StatCard 
+            <StatCard
               icon={CheckCircle}
               label="Successful"
               value={summary.successful_queries}
               subtext={`${summary.total_queries > 0 ? ((summary.successful_queries / summary.total_queries) * 100).toFixed(0) : 0}% success rate`}
               color="green"
             />
-            <StatCard 
+            <StatCard
               icon={Clock}
               label="Avg Response"
               value={`${summary.avg_response_time_ms?.toFixed(0) || 0}ms`}
               subtext="Average latency"
               color="yellow"
             />
-            <StatCard 
+            <StatCard
               icon={Database}
               label="Avg Chunks"
               value={summary.avg_chunks_retrieved?.toFixed(1) || 0}
@@ -779,7 +995,7 @@ export default function InferenceLogsPage() {
             />
           </div>
         )}
-        
+
         {/* Filters */}
         <div className="bg-gray-800/30 rounded-xl border border-gray-700/50 p-4 mb-6">
           <div className="flex flex-wrap gap-4">
@@ -796,11 +1012,11 @@ export default function InferenceLogsPage() {
                 />
               </div>
             </div>
-            
+
             {/* Time Filter */}
             <select
               value={filters.hoursAgo || ''}
-              onChange={(e) => setFilters({...filters, hoursAgo: e.target.value ? parseInt(e.target.value) : null})}
+              onChange={(e) => setFilters({ ...filters, hoursAgo: e.target.value ? parseInt(e.target.value) : null })}
               className="px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-gray-200 text-sm focus:border-blue-500 focus:outline-none appearance-none cursor-pointer min-w-[140px]"
             >
               <option value="1">Last hour</option>
@@ -809,22 +1025,22 @@ export default function InferenceLogsPage() {
               <option value="48">Last 48 hours</option>
               <option value="168">Last week</option>
             </select>
-            
+
             {/* Status Filter */}
             <select
               value={filters.successOnly === null ? '' : filters.successOnly.toString()}
-              onChange={(e) => setFilters({...filters, successOnly: e.target.value === '' ? null : e.target.value === 'true'})}
+              onChange={(e) => setFilters({ ...filters, successOnly: e.target.value === '' ? null : e.target.value === 'true' })}
               className="px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-gray-200 text-sm focus:border-blue-500 focus:outline-none appearance-none cursor-pointer min-w-[130px]"
             >
               <option value="">All status</option>
               <option value="true">✓ Successful</option>
               <option value="false">✗ Failed</option>
             </select>
-            
+
             {/* Source Filter */}
             <select
               value={filters.source}
-              onChange={(e) => setFilters({...filters, source: e.target.value})}
+              onChange={(e) => setFilters({ ...filters, source: e.target.value })}
               className="px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-gray-200 text-sm focus:border-blue-500 focus:outline-none appearance-none cursor-pointer min-w-[150px]"
             >
               <option value="">All sources</option>
@@ -835,7 +1051,7 @@ export default function InferenceLogsPage() {
             </select>
           </div>
         </div>
-        
+
         {/* Logs List */}
         <div className="space-y-3">
           {loading ? (
@@ -855,9 +1071,9 @@ export default function InferenceLogsPage() {
                 <span>Showing {filteredLogs.length} log{filteredLogs.length !== 1 ? 's' : ''}</span>
               </div>
               {filteredLogs.map(log => (
-                <LogRow 
-                  key={log.id} 
-                  log={log} 
+                <LogRow
+                  key={log.id}
+                  log={log}
                   onViewDetails={setSelectedLogId}
                   isSelected={selectedLogId === log.id}
                 />
@@ -866,12 +1082,12 @@ export default function InferenceLogsPage() {
           )}
         </div>
       </main>
-      
+
       {/* Detail Modal */}
       {selectedLogId && (
-        <LogDetailModal 
-          logId={selectedLogId} 
-          onClose={() => setSelectedLogId(null)} 
+        <LogDetailModal
+          logId={selectedLogId}
+          onClose={() => setSelectedLogId(null)}
         />
       )}
     </div>

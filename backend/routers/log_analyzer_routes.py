@@ -90,16 +90,98 @@ class AnalysisJobResponse(BaseModel):
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
+def _get_cached_analyses_by_fingerprint(
+    db: Session,
+    fingerprints: List[str],
+    exclude_job_id: Optional[int] = None,
+    limit_jobs: int = 200
+) -> dict:
+    """
+    Reuse previously completed analyses for identical fingerprints.
+    This reduces latency without reducing retrieval/context quality.
+    """
+    if not fingerprints:
+        return {}
+
+    fp_set = set(fingerprints)
+    cached = {}
+
+    query = db.query(LogAnalysisJob).filter(
+        LogAnalysisJob.status == "completed",
+        LogAnalysisJob.analysis_result.isnot(None)
+    )
+    if exclude_job_id is not None:
+        query = query.filter(LogAnalysisJob.id != exclude_job_id)
+
+    recent_jobs = query.order_by(LogAnalysisJob.created_at.desc()).limit(limit_jobs).all()
+
+    for job in recent_jobs:
+        result = job.analysis_result if isinstance(job.analysis_result, dict) else {}
+        analyses = result.get("analyses", []) if isinstance(result, dict) else []
+        if not isinstance(analyses, list):
+            continue
+
+        for analysis in analyses:
+            if not isinstance(analysis, dict):
+                continue
+            fp = analysis.get("fingerprint")
+            if fp in fp_set and fp not in cached:
+                cached[fp] = analysis
+                if len(cached) == len(fp_set):
+                    return cached
+
+    return cached
+
+
 async def _run_analysis_job(job_id: int, log_text: str, top_k_context: int = 5):
     """Background coroutine: analyze all parsed errors and persist final result."""
     db = SessionLocal()
     try:
         analyzer = _get_analyzer()
-        result = await analyzer.analyze_log(
-            log_content=log_text,
-            selected_errors=None,  # analyze everything
-            top_k_context=top_k_context
+
+        # Parse once to get ordered fingerprints for this uploaded file
+        parsed = analyzer.parse_log(log_text)
+        parsed_errors = parsed.get("errors", [])
+        ordered_fingerprints = [e.get("fingerprint") for e in parsed_errors if e.get("fingerprint")]
+
+        # Reuse prior completed analyses for identical fingerprints
+        cached_by_fp = _get_cached_analyses_by_fingerprint(
+            db=db,
+            fingerprints=ordered_fingerprints,
+            exclude_job_id=job_id,
+            limit_jobs=200
         )
+
+        missing_fps = [fp for fp in ordered_fingerprints if fp not in cached_by_fp]
+
+        fresh_analyses_by_fp = {}
+        if missing_fps:
+            # Full-quality analysis for misses only (no fast-mode compromise)
+            fresh_result = await analyzer.analyze_log(
+                log_content=log_text,
+                selected_errors=missing_fps,
+                top_k_context=top_k_context,
+                fast_mode=False,
+                concurrency=2
+            )
+            for analysis in fresh_result.get("analyses", []):
+                fp = analysis.get("fingerprint")
+                if fp:
+                    fresh_analyses_by_fp[fp] = analysis
+
+        merged_analyses = []
+        for fp in ordered_fingerprints:
+            if fp in cached_by_fp:
+                merged_analyses.append(cached_by_fp[fp])
+            elif fp in fresh_analyses_by_fp:
+                merged_analyses.append(fresh_analyses_by_fp[fp])
+
+        result = {
+            "total_entries": parsed.get("total_entries", 0),
+            "unique_errors": parsed.get("unique_errors", 0),
+            "analyzed_count": len(merged_analyses),
+            "analyses": merged_analyses,
+        }
 
         job = db.query(LogAnalysisJob).filter(LogAnalysisJob.id == job_id).first()
         if not job:

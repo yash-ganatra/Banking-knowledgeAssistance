@@ -401,7 +401,26 @@ async def get_pipeline_visualization(
             "before_count": len(chunks_before_rerank),
             "after_count": len(chunks_after_rerank),
             "filtered_out": len(chunks_before_rerank) - len(chunks_after_rerank)
-        }
+        },
+        "crag": getattr(log, "crag_verdict", None) and {
+            "verdict": getattr(log, "crag_verdict", None),
+            "confidence": getattr(log, "crag_confidence", None),
+            "correct_count": getattr(log, "crag_correct_count", None),
+            "ambiguous_count": getattr(log, "crag_ambiguous_count", None),
+            "incorrect_count": getattr(log, "crag_incorrect_count", None),
+            "evaluation_time_ms": getattr(log, "crag_evaluation_time_ms", None),
+            
+            "corrective_action_taken": getattr(log, "corrective_action_taken", False),
+            "corrective_action_type": getattr(log, "corrective_action_type", None),
+            "rewritten_query": getattr(log, "rewritten_query", None),
+            "retry_count": getattr(log, "retry_count", 0),
+            
+            "refinement_applied": getattr(log, "refinement_applied", False),
+            "refinement_compression": getattr(log, "refinement_compression", None),
+            "sentences_before": getattr(log, "sentences_before", None),
+            "sentences_after": getattr(log, "sentences_after", None),
+            "refinement_time_ms": getattr(log, "refinement_time_ms", None),
+        } or None
     }
 
 @router.delete("/{log_id}")

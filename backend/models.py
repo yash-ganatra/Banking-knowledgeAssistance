@@ -145,6 +145,26 @@ class InferenceLog(Base):
     graph_used = Column(Boolean, default=False)
     graph_context = Column(JSON, nullable=True)  # Stores related entities/relationships found
     
+    # CRAG Evaluation Stats
+    crag_verdict = Column(String(50), nullable=True)
+    crag_confidence = Column(Float, nullable=True)
+    crag_correct_count = Column(Integer, nullable=True)
+    crag_ambiguous_count = Column(Integer, nullable=True)
+    crag_incorrect_count = Column(Integer, nullable=True)
+    crag_evaluation_time_ms = Column(Float, nullable=True)
+    
+    # CRAG Corrective Action Stats
+    corrective_action_type = Column(String(50), default="none", nullable=True)
+    corrective_action_taken = Column(Boolean, default=False)
+    rewritten_query = Column(Text, nullable=True)
+    retry_count = Column(Integer, default=0)
+    
+    # CRAG Knowledge Refinement Stats
+    refinement_applied = Column(Boolean, default=False)
+    sentences_before = Column(Integer, nullable=True)
+    sentences_after = Column(Integer, nullable=True)
+    refinement_time_ms = Column(Float, nullable=True)
+    
     # Timing
     total_time_ms = Column(Float, nullable=True)
     routing_time_ms = Column(Float, nullable=True)

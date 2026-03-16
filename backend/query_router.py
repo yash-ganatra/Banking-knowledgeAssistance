@@ -22,6 +22,10 @@ from utils.groq_rate_limiter import GroqRateLimiter
 from utils.bm25_index import BM25IndexManager
 from utils.hybrid_search import HybridSearchManager, HybridSearchConfig, SearchMethod, QueryIntent, QueryExpansionInfo
 from utils.graph_enhanced_retriever import create_graph_enhanced_retriever, GraphEnhancedRetriever, GraphContext
+from utils.retrieval_evaluator import (
+    RetrievalEvaluator, RetrievalEvaluation, EvaluationVerdict, CorrectiveAction
+)
+from utils.knowledge_refiner import KnowledgeRefiner, RefinementResult
 
 # Security imports
 from security.security_config import (
@@ -1058,13 +1062,18 @@ class QueryRouter:
 class UnifiedQueryEngine:
     """
     Main orchestrator that combines intent classification, routing, and response generation
-    with query preprocessing for improved accuracy
+    with query preprocessing for improved accuracy.
+    Includes CRAG (Corrective RAG) evaluation loop for retrieval quality assessment.
     """
+    
+    MAX_CRAG_RETRIES = 1  # Maximum corrective retrieval retries
     
     def __init__(self,
                  intent_classifier: IntentClassifier,
                  query_router: QueryRouter,
-                 llm_service):
+                 llm_service,
+                 retrieval_evaluator: Optional['RetrievalEvaluator'] = None,
+                 knowledge_refiner: Optional['KnowledgeRefiner'] = None):
         """
         Initialize unified query engine
         
@@ -1072,10 +1081,19 @@ class UnifiedQueryEngine:
             intent_classifier: IntentClassifier instance
             query_router: QueryRouter instance
             llm_service: LLM service for response generation
+            retrieval_evaluator: Optional CRAG retrieval evaluator
+            knowledge_refiner: Optional CRAG knowledge refiner
         """
         self.intent_classifier = intent_classifier
         self.query_router = query_router
         self.llm_service = llm_service
+        self.retrieval_evaluator = retrieval_evaluator
+        self.knowledge_refiner = knowledge_refiner
+        
+        if retrieval_evaluator:
+            logger.info("CRAG retrieval evaluator enabled")
+        if knowledge_refiner:
+            logger.info("CRAG knowledge refiner enabled")
     
     def preprocess_query(self, query: str) -> str:
         """
@@ -1108,21 +1126,16 @@ class UnifiedQueryEngine:
                    min_relevance_score: float = 2.0,
                    inference_logger = None) -> Dict[str, Any]:
         """
-        Execute smart routing and retrieval with preprocessing
+        Execute smart routing and retrieval with preprocessing and CRAG evaluation.
         
-        Args:
-            query: User query text
-            top_k: Number of results to return
-            confidence_threshold: Minimum confidence to include secondary sources
-            min_relevance_score: Minimum cross-encoder score for relevance filtering
-            inference_logger: Optional InferenceLogger instance for detailed logging
-            
-        Returns:
-            Dict containing:
-                - routing_decision: Intent classification details
-                - results: Retrieved and ranked results
-                - context: Formatted context for LLM
-                - llm_response: Generated response
+        Pipeline:
+          1. Preprocess query
+          2. Classify intent → select sources
+          3. Retrieve chunks (hybrid dense+BM25, graph enhancement, RRF, reranking)
+          4. CRAG Evaluation: judge retrieved chunks as CORRECT/AMBIGUOUS/INCORRECT
+          5. Corrective Action: if INCORRECT → rewrite query, retry retrieval once
+          6. Knowledge Refinement: extract answer-relevant sentences from passing chunks
+          7. Format context and generate LLM response
         """
         # Step 0: Preprocess query for better retrieval
         processed_query = self.preprocess_query(query)
@@ -1179,33 +1192,111 @@ class UnifiedQueryEngine:
         logger.info(f"QueryIntent: type={query_intent.query_type}, requires_code={query_intent.requires_code}")
         
         # Step 4: Query appropriate sources (use processed query for retrieval)
-        retrieval_start = time.time()
-        if len(sources_to_query) == 1:
-            # Single source - direct query (no aggressive filtering needed)
-            results, graph_context = await self.query_router.query_single_source(
-                sources_to_query[0],
-                processed_query,
-                top_k,
-                inference_logger=inference_logger,
-                query_intent=query_intent  # Pass intent for smart BM25 expansion
-            )
-        else:
-            # Multi-source - use stricter filtering to remove irrelevant chunks
-            results, graph_context = await self.query_router.query_multi_source_with_filtering(
-                sources_to_query,
-                processed_query,
-                top_k=top_k,
-                final_top_k=top_k,
-                min_relevance_score=min_relevance_score,
-                inference_logger=inference_logger,
-                query_intent=query_intent  # Pass intent for smart BM25 expansion
-            )
-        retrieval_time_ms = (time.time() - retrieval_start) * 1000
+        results, graph_context = await self._retrieve(
+            sources_to_query, processed_query, top_k,
+            min_relevance_score, query_intent, inference_logger
+        )
         
-        # Step 4: Format context
+        # ========== Step 4A: CRAG Evaluation ==========
+        crag_metadata = {}
+        if self.retrieval_evaluator and results:
+            evaluation = self.retrieval_evaluator.evaluate_batch(query, results)
+            
+            # Log evaluation
+            if inference_logger:
+                inference_logger.log_crag_evaluation(
+                    verdict=evaluation.aggregate_verdict.value,
+                    confidence=evaluation.overall_confidence,
+                    correct_count=evaluation.correct_count,
+                    ambiguous_count=evaluation.ambiguous_count,
+                    incorrect_count=evaluation.incorrect_count,
+                    evaluation_time_ms=evaluation.evaluation_time_ms,
+                    recommended_action=evaluation.recommended_action.value,
+                )
+            
+            crag_metadata = evaluation.to_dict()
+            
+            # ========== Step 4B: Corrective Action ==========
+            if evaluation.recommended_action == CorrectiveAction.RETRY_WITH_REWRITE:
+                logger.info("CRAG: Triggering corrective retrieval with query rewrite")
+                
+                rewritten = self._rewrite_query(query, intent, sources_to_query)
+                alt_sources = self._select_alternative_sources(sources_to_query, intent)
+                retry_sources = alt_sources if alt_sources else sources_to_query
+                
+                if inference_logger:
+                    inference_logger.log_corrective_action(
+                        action_type="retry_rewrite",
+                        rewritten_query=rewritten,
+                        alternative_sources=[s.value for s in retry_sources],
+                        retry_attempt=1,
+                    )
+                
+                # Retry retrieval with rewritten query
+                retry_results, retry_graph = await self._retrieve(
+                    retry_sources, rewritten, top_k,
+                    min_relevance_score, query_intent, inference_logger
+                )
+                
+                if retry_results:
+                    # Re-evaluate the retry results
+                    retry_eval = self.retrieval_evaluator.evaluate_batch(query, retry_results)
+                    
+                    # Use retry results if they are better
+                    if retry_eval.correct_count > evaluation.correct_count:
+                        logger.info(
+                            f"CRAG retry improved results: "
+                            f"{evaluation.correct_count} → {retry_eval.correct_count} correct chunks"
+                        )
+                        results = retry_results
+                        graph_context = retry_graph
+                        evaluation = retry_eval
+                        crag_metadata = evaluation.to_dict()
+                        crag_metadata["retry_used"] = True
+                    else:
+                        logger.info("CRAG retry did not improve results — keeping original")
+                        crag_metadata["retry_used"] = False
+                else:
+                    logger.info("CRAG retry returned no results — keeping original")
+                    crag_metadata["retry_used"] = False
+            
+            # ========== Step 4C: Knowledge Refinement ==========
+            if self.knowledge_refiner and results:
+                passing_indices = evaluation.get_passing_chunk_indices()
+                
+                if passing_indices:
+                    refinement = self.knowledge_refiner.refine_chunks(
+                        query=query,
+                        chunks=results,
+                        passing_indices=passing_indices,
+                    )
+                    
+                    # Log refinement
+                    if inference_logger:
+                        inference_logger.log_knowledge_refinement(
+                            original_chars=refinement.total_original_chars,
+                            refined_chars=refinement.total_refined_chars,
+                            sentences_before=refinement.total_sentences_before,
+                            sentences_after=refinement.total_sentences_after,
+                            refinement_time_ms=refinement.refinement_time_ms,
+                        )
+                    
+                    # Replace chunk content with refined content
+                    for rc in refinement.refined_chunks:
+                        if rc.original_chunk_index < len(results):
+                            results[rc.original_chunk_index]['content'] = rc.refined_content
+                    
+                    # Filter to only passing chunks
+                    results = [results[i] for i in passing_indices if i < len(results)]
+                    
+                    crag_metadata["refinement"] = refinement.to_dict()
+                else:
+                    logger.warning("CRAG: No chunks passed evaluation — sending all to LLM")
+        
+        # Step 5: Format context
         context = self._format_context_multi_source(results, graph_context)
         
-        # Step 5: Generate LLM response
+        # Step 6: Generate LLM response
         llm_response = None
         input_tokens = None
         output_tokens = None
@@ -1232,8 +1323,135 @@ class UnifiedQueryEngine:
             "sources_queried": [s.value for s in sources_to_query],
             "results": results,
             "context": context,
-            "llm_response": llm_response
+            "llm_response": llm_response,
+            "crag_metadata": crag_metadata,
         }
+    
+    async def _retrieve(
+        self,
+        sources: List[KnowledgeSource],
+        query: str,
+        top_k: int,
+        min_relevance_score: float,
+        query_intent: QueryIntent,
+        inference_logger = None,
+    ) -> Tuple[List[Dict], Optional[GraphContext]]:
+        """Execute retrieval from sources (single or multi-source)."""
+        if len(sources) == 1:
+            return await self.query_router.query_single_source(
+                sources[0], query, top_k,
+                inference_logger=inference_logger,
+                query_intent=query_intent,
+            )
+        else:
+            return await self.query_router.query_multi_source_with_filtering(
+                sources, query,
+                top_k=top_k,
+                final_top_k=top_k,
+                min_relevance_score=min_relevance_score,
+                inference_logger=inference_logger,
+                query_intent=query_intent,
+            )
+    
+    def _rewrite_query(self, original_query: str, intent: IntentClassificationResult,
+                       failed_sources: List[KnowledgeSource]) -> str:
+        """
+        Rewrite query for corrective retrieval using LLM.
+        Falls back to simple heuristic expansion if LLM call fails.
+        """
+        try:
+            if not self.llm_service:
+                return self._heuristic_rewrite(original_query)
+            
+            prompt = (
+                "You are a query rewriter for a banking knowledge base. "
+                "The original query did not retrieve relevant results. "
+                "Rewrite the query to be more specific or use different terms. "
+                "Output ONLY the rewritten query, nothing else.\n\n"
+                f"Original query: {original_query}\n"
+                f"Query type: {intent.query_type.value}\n"
+                f"Searched sources: {', '.join(s.value for s in failed_sources)}\n\n"
+                "Rewritten query:"
+            )
+            
+            from groq import Groq
+            client = self.llm_service.client
+            
+            @self.llm_service.rate_limiter.with_retry
+            def _rewrite(client, messages, model, temperature, max_tokens):
+                return client.chat.completions.create(
+                    model=model, messages=messages,
+                    temperature=temperature, max_tokens=max_tokens,
+                )
+            
+            resp = _rewrite(
+                client=client,
+                messages=[{"role": "user", "content": prompt}],
+                model="llama-3.1-8b-instant",
+                temperature=0.5,
+                max_tokens=200,
+            )
+            rewritten = resp.choices[0].message.content.strip()
+            logger.info(f"CRAG query rewrite: '{original_query}' → '{rewritten}'")
+            return rewritten
+            
+        except Exception as e:
+            logger.warning(f"CRAG query rewrite LLM failed: {e}, using heuristic")
+            return self._heuristic_rewrite(original_query)
+    
+    def _heuristic_rewrite(self, query: str) -> str:
+        """Simple heuristic query rewrite when LLM is unavailable."""
+        # Add context words and expand abbreviations
+        expansions = {
+            'fd': 'fixed deposit FD',
+            'td': 'term deposit TD',
+            'kyc': 'know your customer KYC',
+            'oao': 'online account opening OAO',
+            'aof': 'account opening form AOF',
+            'dsa': 'direct selling agent DSA',
+            'cif': 'customer information file CIF',
+        }
+        words = query.lower().split()
+        expanded = []
+        for w in words:
+            if w in expansions:
+                expanded.append(expansions[w])
+            else:
+                expanded.append(w)
+        return ' '.join(expanded)
+    
+    def _select_alternative_sources(
+        self,
+        tried_sources: List[KnowledgeSource],
+        intent: IntentClassificationResult,
+    ) -> List[KnowledgeSource]:
+        """
+        Select alternative sources that were not tried in the initial retrieval.
+        Returns empty list if all sources were already tried.
+        """
+        all_sources = [
+            KnowledgeSource.BUSINESS_DOCS,
+            KnowledgeSource.PHP_CODE,
+            KnowledgeSource.JS_CODE,
+            KnowledgeSource.BLADE_TEMPLATES,
+        ]
+        untried = [s for s in all_sources if s not in tried_sources]
+        
+        if not untried:
+            # All sources already tried — retry same sources with rewritten query
+            return tried_sources
+        
+        # Prioritize: secondary sources from intent classification first
+        prioritized = []
+        for s in intent.secondary_sources:
+            if s in untried:
+                prioritized.append(s)
+        for s in untried:
+            if s not in prioritized:
+                prioritized.append(s)
+        
+        # Return at most 2 alternative sources to keep retry fast
+        return prioritized[:2]
     
     def _format_context_multi_source(self, results: List[Dict], graph_context: Optional[GraphContext] = None) -> str:
         """Format context from potentially multiple sources with graph data"""

@@ -7,6 +7,7 @@ RAG pipeline (vector DB + LLM) to provide root cause analysis for errors.
 import re
 import hashlib
 import logging
+import asyncio
 from typing import List, Dict, Optional, Any, Tuple
 from datetime import datetime
 from dataclasses import dataclass, field
@@ -439,7 +440,9 @@ Be very specific. Reference actual variable names, function signatures, and line
         self, 
         log_content: str, 
         selected_errors: Optional[List[str]] = None,
-        top_k_context: int = 5
+        top_k_context: int = 5,
+        fast_mode: bool = False,
+        concurrency: int = 1
     ) -> Dict[str, Any]:
         """
         Full analysis pipeline: parse → deduplicate → retrieve code → LLM analysis.
@@ -451,10 +454,22 @@ Be very specific. Reference actual variable names, function signatures, and line
         if selected_errors:
             deduped = [d for d in deduped if d.fingerprint in selected_errors]
         
-        results = []
-        for dedup_error in deduped:
-            analysis = await self._analyze_single_error(dedup_error, top_k_context)
-            results.append(analysis)
+        # Faster mode: reduce retrieval breadth for lower latency
+        effective_top_k = max(1, min(top_k_context, 3 if fast_mode else top_k_context))
+
+        # Process errors with bounded concurrency (LLM calls are network-bound)
+        sem = asyncio.Semaphore(max(1, concurrency))
+
+        async def _run_single(dedup_error: DeduplicatedError) -> AnalyzedError:
+            async with sem:
+                return await self._analyze_single_error(
+                    dedup_error,
+                    top_k=effective_top_k,
+                    fast_mode=fast_mode
+                )
+
+        tasks = [_run_single(d) for d in deduped]
+        results = await asyncio.gather(*tasks)
         
         return {
             "total_entries": len(errors),
@@ -466,7 +481,8 @@ Be very specific. Reference actual variable names, function signatures, and line
     async def _analyze_single_error(
         self, 
         dedup_error: DeduplicatedError,
-        top_k: int = 5
+        top_k: int = 5,
+        fast_mode: bool = False
     ) -> AnalyzedError:
         """
         Analyze a single deduplicated error:
@@ -478,9 +494,17 @@ Be very specific. Reference actual variable names, function signatures, and line
         
         # Step 1: Build multiple search queries for better code retrieval
         search_queries = self._build_search_queries(error)
+        if fast_mode:
+            # Keep only the most specific queries to reduce vector calls
+            search_queries = search_queries[:2]
         
         # Step 2: Retrieve code context from the appropriate vector DB(s)
-        code_context, files_referenced = self._retrieve_code_context_multi(error, search_queries, top_k)
+        code_context, files_referenced = self._retrieve_code_context_multi(
+            error,
+            search_queries,
+            top_k,
+            fast_mode=fast_mode
+        )
         
         # Step 3: Generate LLM root cause analysis
         root_cause = self._generate_analysis(dedup_error, code_context)
@@ -566,7 +590,8 @@ Be very specific. Reference actual variable names, function signatures, and line
         self, 
         error: ParsedError, 
         search_queries: List[str],
-        top_k: int = 5
+        top_k: int = 5,
+        fast_mode: bool = False
     ) -> Tuple[str, List[str]]:
         """
         Retrieve relevant code from the vector DB using MULTIPLE search queries.
@@ -637,14 +662,16 @@ Be very specific. Reference actual variable names, function signatures, and line
         if not all_results:
             return "No relevant code context found in the indexed codebase.", files_referenced
         
-        # Take up to 8 best results (to stay within token limits)
-        top_results = all_results[:8]
+        # Take fewer results in fast mode
+        max_results = 4 if fast_mode else 8
+        top_results = all_results[:max_results]
         
         context_parts = []
         for r in top_results:
             file_info = r.get('metadata', {}).get('file_path') or r.get('metadata', {}).get('file_name') or 'Unknown'
             short_file = file_info.split('/')[-1] if '/' in file_info else file_info
-            content = r.get('content', '')[:3000]  # Cap per chunk
+            content_cap = 1500 if fast_mode else 3000
+            content = r.get('content', '')[:content_cap]  # Cap per chunk
             context_parts.append(f"[File: {short_file} | Full path: {file_info}]\n{content}")
         
         return "\n\n---\n\n".join(context_parts), files_referenced

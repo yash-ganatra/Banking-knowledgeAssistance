@@ -96,6 +96,25 @@ class InferenceLogEntry:
     graph_used: bool = False
     graph_context: Optional[Dict[str, Any]] = None
     
+    # CRAG (Corrective RAG) Evaluation
+    crag_verdict: Optional[str] = None             # "correct", "ambiguous", "incorrect"
+    crag_confidence: Optional[float] = None
+    crag_correct_count: int = 0
+    crag_ambiguous_count: int = 0
+    crag_incorrect_count: int = 0
+    crag_evaluation_time_ms: float = 0
+    corrective_action_taken: bool = False
+    corrective_action_type: Optional[str] = None   # "none", "refine", "retry_rewrite", "retry_alt"
+    rewritten_query: Optional[str] = None
+    retry_count: int = 0
+    
+    # Knowledge Refinement
+    refinement_applied: bool = False
+    refinement_compression: Optional[float] = None  # e.g., 0.4 means 40% of original size
+    sentences_before: int = 0
+    sentences_after: int = 0
+    refinement_time_ms: float = 0
+    
     # User/Session
     user_id: Optional[int] = None
     conversation_id: Optional[int] = None
@@ -395,6 +414,75 @@ class InferenceLogger:
             if output_tokens is not None:
                 self.current_log.output_tokens = output_tokens
     
+    def log_crag_evaluation(
+        self,
+        verdict: str,
+        confidence: float,
+        correct_count: int,
+        ambiguous_count: int,
+        incorrect_count: int,
+        evaluation_time_ms: float,
+        recommended_action: str = "none",
+    ) -> None:
+        """Log CRAG retrieval evaluation results."""
+        if not self.current_log:
+            return
+        self.current_log.crag_verdict = verdict
+        self.current_log.crag_confidence = confidence
+        self.current_log.crag_correct_count = correct_count
+        self.current_log.crag_ambiguous_count = ambiguous_count
+        self.current_log.crag_incorrect_count = incorrect_count
+        self.current_log.crag_evaluation_time_ms = evaluation_time_ms
+        self.current_log.corrective_action_type = recommended_action
+        logger.info(
+            f"CRAG evaluation logged: verdict={verdict}, confidence={confidence:.2f}, "
+            f"correct={correct_count}, ambiguous={ambiguous_count}, incorrect={incorrect_count}, "
+            f"action={recommended_action}, time={evaluation_time_ms:.0f}ms"
+        )
+    
+    def log_corrective_action(
+        self,
+        action_type: str,
+        rewritten_query: Optional[str] = None,
+        alternative_sources: Optional[List[str]] = None,
+        retry_attempt: int = 1,
+    ) -> None:
+        """Log a corrective action taken after CRAG evaluation."""
+        if not self.current_log:
+            return
+        self.current_log.corrective_action_taken = True
+        self.current_log.corrective_action_type = action_type
+        self.current_log.rewritten_query = rewritten_query
+        self.current_log.retry_count = retry_attempt
+        logger.info(
+            f"Corrective action logged: type={action_type}, retry={retry_attempt}, "
+            f"rewritten_query={rewritten_query[:80] if rewritten_query else 'N/A'}"
+        )
+    
+    def log_knowledge_refinement(
+        self,
+        original_chars: int,
+        refined_chars: int,
+        sentences_before: int,
+        sentences_after: int,
+        refinement_time_ms: float,
+    ) -> None:
+        """Log knowledge refinement statistics."""
+        if not self.current_log:
+            return
+        self.current_log.refinement_applied = True
+        self.current_log.refinement_compression = (
+            refined_chars / original_chars if original_chars > 0 else 1.0
+        )
+        self.current_log.sentences_before = sentences_before
+        self.current_log.sentences_after = sentences_after
+        self.current_log.refinement_time_ms = refinement_time_ms
+        logger.info(
+            f"Knowledge refinement logged: {sentences_before}→{sentences_after} sentences, "
+            f"compression={self.current_log.refinement_compression:.1%}, "
+            f"time={refinement_time_ms:.0f}ms"
+        )
+    
     def log_error(self, error_message: str) -> None:
         """Log an error during inference"""
         if self.current_log:
@@ -490,6 +578,22 @@ class InferenceLogger:
                 # Graph Enhancement
                 graph_used=log_entry.graph_used,
                 graph_context=log_entry.graph_context,
+                
+                # CRAG Fields
+                crag_verdict=log_entry.crag_verdict,
+                crag_confidence=log_entry.crag_confidence,
+                crag_correct_count=log_entry.crag_correct_count,
+                crag_ambiguous_count=log_entry.crag_ambiguous_count,
+                crag_incorrect_count=log_entry.crag_incorrect_count,
+                crag_evaluation_time_ms=log_entry.crag_evaluation_time_ms,
+                corrective_action_type=log_entry.corrective_action_type,
+                corrective_action_taken=log_entry.corrective_action_taken,
+                rewritten_query=log_entry.rewritten_query,
+                retry_count=log_entry.retry_count,
+                refinement_applied=log_entry.refinement_applied,
+                sentences_before=log_entry.sentences_before,
+                sentences_after=log_entry.sentences_after,
+                refinement_time_ms=log_entry.refinement_time_ms,
                 
                 total_time_ms=log_entry.total_time_ms,
                 routing_time_ms=log_entry.routing_time_ms,
